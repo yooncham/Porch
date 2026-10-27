@@ -11,6 +11,9 @@ Engine ──HTTP──▶ api.py ──▶ CommandRouter ──▶ DeviceRegist
                              latency                                └─ MatterDriver  (matter)
 ```
 
+New here? The [field guide](docs/FIELD_GUIDE.md) explains what each part does and walks
+through running the whole system step by step.
+
 ## See the MVP work
 
 About five minutes, no API key, all devices simulated. You need Python 3.11 or newer and
