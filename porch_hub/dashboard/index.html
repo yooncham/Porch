@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Porch Device Hub</title>
+<link rel="icon" href="data:,">
+<!--
+  Styling is Tailwind (loaded from its CDN below). Demo Day may have no internet, so the
+  rules for every utility this page uses are also inlined here: without the CDN the page
+  looks the same and works the same. tests/test_dashboard.py checks that every class used
+  on the page has a rule here. Add ?nocdn to the URL to see the page without Tailwind.
+-->
+<style id="fallback-styles">
+*,::before,::after{box-sizing:border-box;border:0 solid}
+html{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;line-height:1.5;-webkit-text-size-adjust:100%}
+body,h1,h2,h3,p,dl,dd,ul{margin:0}
+h1,h2,h3{font-size:inherit;font-weight:inherit}
+ul{list-style:none;padding:0}
+button,input,select{font:inherit;color:inherit;margin:0}
+button{cursor:pointer;background:transparent}
+button:disabled{cursor:not-allowed}
+table{border-collapse:collapse;text-indent:0}
+.hidden{display:none}.block{display:block}.flex{display:flex}.inline-flex{display:inline-flex}.grid{display:grid}
+.sticky{position:sticky}.top-0{top:0}.z-10{z-index:10}
+.flex-wrap{flex-wrap:wrap}.flex-1{flex:1 1 0%}.shrink-0{flex-shrink:0}.min-w-0{min-width:0}
+.items-center{align-items:center}.items-baseline{align-items:baseline}.items-start{align-items:flex-start}
+.justify-between{justify-content:space-between}.justify-center{justify-content:center}
+.gap-1{gap:.25rem}.gap-1\.5{gap:.375rem}.gap-2{gap:.5rem}.gap-3{gap:.75rem}.gap-4{gap:1rem}.gap-6{gap:1.5rem}
+.gap-x-3{column-gap:.75rem}.gap-y-1{row-gap:.25rem}
+.grid-cols-1{grid-template-columns:repeat(1,minmax(0,1fr))}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.space-y-1>:not(:last-child){margin-bottom:.25rem}.space-y-3>:not(:last-child){margin-bottom:.75rem}.space-y-6>:not(:last-child){margin-bottom:1.5rem}
+.mx-auto{margin-left:auto;margin-right:auto}.mt-1{margin-top:.25rem}.mt-2{margin-top:.5rem}.mt-3{margin-top:.75rem}.mt-4{margin-top:1rem}.mb-3{margin-bottom:.75rem}
+.p-3{padding:.75rem}.p-4{padding:1rem}.px-0\.5{padding-left:.125rem;padding-right:.125rem}.px-2{padding-left:.5rem;padding-right:.5rem}.px-3{padding-left:.75rem;padding-right:.75rem}.px-4{padding-left:1rem;padding-right:1rem}
+.py-0\.5{padding-top:.125rem;padding-bottom:.125rem}.py-1{padding-top:.25rem;padding-bottom:.25rem}.py-1\.5{padding-top:.375rem;padding-bottom:.375rem}.py-2{padding-top:.5rem;padding-bottom:.5rem}.py-3{padding-top:.75rem;padding-bottom:.75rem}.py-6{padding-top:1.5rem;padding-bottom:1.5rem}.pr-3{padding-right:.75rem}
+.w-full{width:100%}.w-9{width:2.25rem}.h-2{height:.5rem}.w-2{width:.5rem}.h-2\.5{height:.625rem}.w-2\.5{width:.625rem}.h-4{height:1rem}.w-4{width:1rem}.h-5{height:1.25rem}.max-w-7xl{max-width:80rem}.max-h-72{max-height:18rem}.min-h-screen{min-height:100vh}
+.overflow-x-auto{overflow-x:auto}.overflow-y-auto{overflow-y:auto}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.whitespace-nowrap{white-space:nowrap}.break-all{word-break:break-all}
+.rounded-md{border-radius:.375rem}.rounded-lg{border-radius:.5rem}.rounded-xl{border-radius:.75rem}.rounded-full{border-radius:9999px}
+.border{border-width:1px}.border-t{border-top-width:1px}.border-b{border-bottom-width:1px}
+.border-slate-700{border-color:#334155}.border-slate-800{border-color:#1e293b}.border-amber-500\/30{border-color:rgba(245,158,11,.3)}.border-emerald-500\/30{border-color:rgba(16,185,129,.3)}.border-rose-500\/30{border-color:rgba(244,63,94,.3)}
+.divide-y>:not(:last-child){border-bottom-width:1px}.divide-slate-800>:not(:last-child){border-color:#1e293b}
+.bg-slate-950{background-color:#020617}.bg-slate-950\/90{background-color:rgba(2,6,23,.9)}.bg-slate-900{background-color:#0f172a}.bg-slate-800{background-color:#1e293b}.bg-slate-700{background-color:#334155}.bg-slate-500{background-color:#64748b}
+.bg-sky-600{background-color:#0284c7}.bg-sky-500\/15{background-color:rgba(14,165,233,.15)}.bg-amber-500{background-color:#f59e0b}.bg-amber-500\/10{background-color:rgba(245,158,11,.1)}.bg-amber-500\/15{background-color:rgba(245,158,11,.15)}
+.bg-emerald-400{background-color:#34d399}.bg-emerald-500\/15{background-color:rgba(16,185,129,.15)}.bg-rose-500{background-color:#f43f5e}.bg-rose-500\/15{background-color:rgba(244,63,94,.15)}.bg-white{background-color:#fff}
+.text-white{color:#fff}.text-slate-100{color:#f1f5f9}.text-slate-200{color:#e2e8f0}.text-slate-300{color:#cbd5e1}.text-slate-400{color:#94a3b8}.text-slate-500{color:#64748b}
+.text-sky-300{color:#7dd3fc}.text-amber-300{color:#fcd34d}.text-emerald-300{color:#6ee7b7}.text-rose-300{color:#fda4af}
+.text-left{text-align:left}.text-right{text-align:right}
+.text-xs{font-size:.75rem;line-height:1rem}.text-sm{font-size:.875rem;line-height:1.25rem}.text-lg{font-size:1.125rem;line-height:1.75rem}
+.font-medium{font-weight:500}.font-semibold{font-weight:600}.font-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.uppercase{text-transform:uppercase}.tracking-wide{letter-spacing:.025em}.tabular-nums{font-variant-numeric:tabular-nums}.antialiased{-webkit-font-smoothing:antialiased}
+.ring-1{box-shadow:0 0 0 1px var(--ring,currentColor)}.ring-2{box-shadow:0 0 0 2px var(--ring,currentColor)}
+.ring-sky-500{--ring:#0ea5e9}.ring-sky-500\/30{--ring:rgba(14,165,233,.3)}.ring-slate-700{--ring:#334155}
+.opacity-50{opacity:.5}.transition{transition:all .2s}.backdrop-blur{-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.translate-x-4{translate:1rem 0}
+.hover\:bg-slate-700:hover{background-color:#334155}.hover\:bg-sky-500:hover{background-color:#0ea5e9}
+.disabled\:opacity-50:disabled{opacity:.5}
+@media (min-width:640px){.sm\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1024px){.lg\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}.lg\:col-span-2{grid-column:span 2/span 2}.lg\:col-span-3{grid-column:span 3/span 3}}
+@media (min-width:1280px){.xl\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}}
+</style>
+<script>
+  // Tailwind's browser build, pinned. Skipped with ?nocdn; the inline rules above cover the page either way.
+  if (!new URLSearchParams(location.search).has("nocdn")) {
+    const tailwind = document.createElement("script");
+    tailwind.src = "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11";
+    document.head.appendChild(tailwind);
+  }
+</script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
+<header class="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/90 backdrop-blur">
+  <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+    <div>
+      <h1 class="text-lg font-semibold">Porch Device Hub</h1>
+      <p class="text-xs text-slate-400">Interface v0 · live registry, commands and read-back</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-3">
+      <span class="inline-flex items-center gap-2 rounded-full border border-slate-800 px-3 py-1 text-xs text-slate-300">
+        <span id="ws-dot" class="h-2 w-2 rounded-full bg-slate-500"></span>
+        <span id="ws-label">Connecting…</span>
+      </span>
+      <button id="offline-toggle" type="button" role="switch" aria-checked="false"
+              class="inline-flex items-center gap-2 rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700 disabled:opacity-50">
+        <span id="offline-track" class="inline-flex h-5 w-9 items-center rounded-full bg-slate-700 px-0.5 transition">
+          <span id="offline-knob" class="h-4 w-4 rounded-full bg-white transition"></span>
+        </span>
+        <span id="offline-label">Offline demo mode: off</span>
+      </button>
+    </div>
+  </div>
+  <div id="offline-banner" class="hidden border-t border-amber-500/30 bg-amber-500/10">
+    <p class="mx-auto max-w-7xl px-4 py-2 text-sm text-amber-300">
+      DEMO_OFFLINE_MODE is on: commands run on the digital copy. No device or network is touched.
+    </p>
+  </div>
+</header>
+
+<main class="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-3">
+  <section class="lg:col-span-2" aria-labelledby="registry-title">
+    <div class="mb-3 flex items-baseline justify-between">
+      <h2 id="registry-title" class="text-sm font-semibold uppercase tracking-wide text-slate-300">Device registry</h2>
+      <span id="device-count" class="text-sm text-slate-400">Loading…</span>
+    </div>
+    <div id="device-grid" class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"></div>
+  </section>
+
+  <aside class="space-y-6">
+    <section class="rounded-xl border border-slate-800 bg-slate-900 p-4" aria-labelledby="controls-title">
+      <h2 id="controls-title" class="text-sm font-semibold uppercase tracking-wide text-slate-300">Test controls</h2>
+      <div id="presets" class="mt-3 flex flex-wrap gap-2"></div>
+      <form id="command-form" class="mt-4 space-y-3">
+        <label class="block text-xs text-slate-400">Device
+          <select id="device-select" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"></select>
+        </label>
+        <label class="block text-xs text-slate-400">Command
+          <select id="command-select" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"></select>
+        </label>
+        <div id="delay-fields" class="hidden">
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block text-xs text-slate-400">Hours
+              <input id="delay-hours" type="number" min="0" max="23" value="4" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
+            </label>
+            <label class="block text-xs text-slate-400">Minutes
+              <input id="delay-minutes" type="number" min="0" max="59" value="0" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
+            </label>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button id="run-button" type="submit" class="flex-1 rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50">Run command</button>
+          <button id="simulate-button" type="button" class="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50">Dry run</button>
+        </div>
+      </form>
+      <div id="result" class="mt-4 hidden rounded-lg border p-3 text-sm"></div>
+    </section>
+
+    <section class="rounded-xl border border-slate-800 bg-slate-900 p-4" aria-labelledby="scenes-title">
+      <h2 id="scenes-title" class="text-sm font-semibold uppercase tracking-wide text-slate-300">Offline scenes</h2>
+      <p id="scene-hint" class="mt-2 text-xs text-slate-400">Turn on offline demo mode to set sensor readings in the digital copy.</p>
+      <div id="scenes" class="mt-3 flex flex-wrap gap-2"></div>
+    </section>
+
+    <section class="rounded-xl border border-slate-800 bg-slate-900 p-4" aria-labelledby="feed-title">
+      <h2 id="feed-title" class="text-sm font-semibold uppercase tracking-wide text-slate-300">State updates</h2>
+      <ul id="feed" class="mt-3 max-h-72 space-y-1 overflow-y-auto text-xs text-slate-300"></ul>
+    </section>
+  </aside>
+
+  <section class="lg:col-span-3 rounded-xl border border-slate-800 bg-slate-900 p-4" aria-labelledby="log-title">
+    <div class="mb-3 flex items-baseline justify-between">
+      <h2 id="log-title" class="text-sm font-semibold uppercase tracking-wide text-slate-300">Command and latency log</h2>
+      <span id="log-count" class="text-xs text-slate-400">No commands yet</span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-sm">
+        <thead class="border-b border-slate-800 text-xs uppercase tracking-wide text-slate-400">
+          <tr>
+            <th class="py-2 pr-3 font-medium">Time</th>
+            <th class="py-2 pr-3 font-medium">Device</th>
+            <th class="py-2 pr-3 font-medium">Command</th>
+            <th class="py-2 pr-3 text-right font-medium">Latency</th>
+            <th class="py-2 pr-3 font-medium">Read-back</th>
+            <th class="py-2 pr-3 font-medium">Path</th>
+            <th class="py-2 pr-3 font-medium">Idempotency key</th>
+          </tr>
+        </thead>
+        <tbody id="log" class="divide-y divide-slate-800"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+// Every class string the script uses goes through el() or cls(), so tests can check the fallback styles cover it.
+const cls = (s) => s;
+function el(tag, classes, text) {
+  const node = document.createElement(tag);
+  if (classes) node.className = classes;
+  if (text !== undefined && text !== null) node.textContent = String(text);  // always text, never markup: names come from devices
+  return node;
+}
+const $ = (id) => document.getElementById(id);
+
+const PATHS = {
+  matter: "Matter · local",
+  google_home: "Google Home · cloud",
+  lg_thinq: "LG ThinQ · cloud",
+};
+const TONES = {
+  good: cls("font-mono text-emerald-300"),
+  warn: cls("font-mono text-amber-300"),
+  bad: cls("font-mono text-rose-300"),
+  info: cls("font-mono text-sky-300"),
+  plain: cls("font-mono text-slate-100"),
+};
+const VALUE_TONES = {
+  Locked: "good", Unlocked: "warn", NotFullyLocked: "bad", Unlatched: "warn",
+  Running: "info", Paused: "warn", Stopped: "plain", Error: "bad", Unknown: "warn",
+  Open: "good", Closed: "warn", Transitioning: "info",
+  Charging: "info", Docked: "plain", SeekingCharger: "info",
+};
+const MAX_LOG_ROWS = 200;
+const MAX_FEED_ROWS = 60;
+
+const state = {
+  devices: new Map(),
+  offline: false,
+  switching: false,
+  socket: null,
+  socketOpen: false,
+  retryMs: 1000,
+  logged: new Set(),  // idempotency keys already in the log, so an HTTP answer and its event are not both shown
+  logRows: 0,
+};
+
+// ---- HTTP
+
+function devicePath(id) {
+  return id.split("/").map(encodeURIComponent).join("/");
+}
+
+async function api(method, path, body) {
+  const response = await fetch(path, {
+    method,
+    headers: body ? { "content-type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = typeof data.detail === "string" ? data.detail
+      : Array.isArray(data.detail) ? data.detail.map((e) => `${(e.loc || []).join(".")}: ${e.msg}`).join("; ")
+      : JSON.stringify(data);
+    throw new Error(`${response.status}: ${detail}`);
+  }
+  return data;
+}
+
+function newKey() {
+  const random = (crypto.randomUUID && crypto.randomUUID()) ||
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `dashboard-${random}`;
+}
+
+// ---- Formatting
+
+function timeOf(iso) {
+  const at = iso ? new Date(iso) : new Date();
+  const hms = at.toLocaleTimeString([], { hour12: false });
+  return `${hms}.${String(at.getMilliseconds()).padStart(3, "0")}`;
+}
+
+function formatValue(name, value) {
+  if (value === null || value === undefined) return "—";
+  if (name === "BatPercentRemaining" && typeof value === "number") return `${value / 2}%`;  // half-percent units
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
+}
+
+function toneFor(cluster, name, value) {
+  if (cluster === "BooleanState" && name === "StateValue") return value ? TONES.bad : TONES.good;  // a wet leak sensor
+  if (name === "RemoteStartAllowed") return value === true ? TONES.good : TONES.warn;
+  return TONES[VALUE_TONES[value] || "plain"];
+}
+
+function describe(device) {
+  return device ? `${device.name}` : "";
+}
+
+// ---- Device registry
+
+function renderDevices() {
+  const grid = $("device-grid");
+  const devices = [...state.devices.values()].sort((a, b) => a.room.localeCompare(b.room) || a.name.localeCompare(b.name));
+  grid.replaceChildren(...devices.map(card));
+  const online = devices.filter((d) => d.online).length;
+  $("device-count").textContent = `${devices.length} devices · ${online} online`;
+}
+
+function card(device) {
+  const article = el("article", "rounded-xl border border-slate-800 bg-slate-900 p-4 transition");
+  article.dataset.id = device.id;
+  fillCard(article, device);
+  return article;
+}
+
+function fillCard(article, device) {
+  const top = el("div", "flex items-start justify-between gap-2");
+  const title = el("div", "min-w-0");
+  title.append(el("h3", "truncate font-medium text-slate-100", device.name),
+               el("p", "truncate text-xs text-slate-400", `${device.room} · ${device.device_type}`));
+  const status = el("span", "inline-flex shrink-0 items-center gap-1.5 text-xs text-slate-400");
+  status.append(el("span", device.online ? cls("h-2.5 w-2.5 rounded-full bg-emerald-400") : cls("h-2.5 w-2.5 rounded-full bg-rose-500")),
+                el("span", "", device.online ? "online" : "offline"));
+  top.append(title, status);
+
+  const badges = el("div", "mt-3 flex flex-wrap gap-1.5");
+  for (const path of device.control_paths) {
+    const primary = path === device.primary_control_path;
+    const badge = el("span", primary ? cls("rounded-md bg-sky-500/15 px-2 py-0.5 text-xs font-medium text-sky-300 ring-1 ring-sky-500/30")
+                                     : cls("rounded-md bg-slate-800 px-2 py-0.5 text-xs text-slate-400"),
+                     `${PATHS[path] || path}${primary ? "" : " · fallback"}`);
+    badge.title = primary ? "Commands go this way now" : "Used if the paths before it cannot reach the device";
+    badges.append(badge);
+  }
+
+  const attributes = el("dl", "mt-3 space-y-1 text-sm");
+  for (const [clusterName, cluster] of Object.entries(device.clusters)) {
+    for (const [name, value] of Object.entries(cluster.attributes)) {
+      const row = el("div", "flex justify-between gap-3");
+      const label = el("dt", "truncate text-slate-400", name);
+      label.title = clusterName;
+      row.append(label, el("dd", toneFor(clusterName, name, value), formatValue(name, value)));
+      attributes.append(row);
+    }
+  }
+  if (!attributes.children.length) attributes.append(el("p", "text-xs text-slate-500", "No state reported yet"));
+
+  const footer = el("p", "mt-3 text-xs text-slate-500", `updated ${timeOf(device.last_updated_at)}`);
+  article.replaceChildren(top, badges, attributes, footer);
+}
+
+function updateCard(device, flash) {
+  const article = document.querySelector(`[data-id="${CSS.escape(device.id)}"]`);
+  if (!article) return renderDevices();
+  fillCard(article, device);
+  if (flash) {
+    article.classList.add(cls("ring-2"), cls("ring-sky-500"));
+    setTimeout(() => article.classList.remove(cls("ring-2"), cls("ring-sky-500")), 900);
+  }
+  const online = [...state.devices.values()].filter((d) => d.online).length;
+  $("device-count").textContent = `${state.devices.size} devices · ${online} online`;
+}
+
+async function loadDevices() {
+  try {
+    const list = await api("GET", "/devices");
+    state.devices = new Map(list.map((d) => [d.id, d]));
+    renderDevices();
+    renderControls();
+  } catch (error) {
+    $("device-count").textContent = `Could not load devices (${error.message})`;
+  }
+}
+
+// ---- Controls
+
+function commandsOf(device) {
+  const names = [];
+  for (const cluster of Object.values(device.clusters)) {
+    for (const name of cluster.commands) if (!names.includes(name)) names.push(name);
+  }
+  return names;
+}
+
+function renderControls() {
+  const deviceSelect = $("device-select");
+  const previous = deviceSelect.value;
+  const controllable = [...state.devices.values()].filter((d) => commandsOf(d).length);
+  deviceSelect.replaceChildren(...controllable.map((d) => {
+    const option = el("option", "", `${d.name} — ${d.room} (${d.device_type})`);
+    option.value = d.id;
+    return option;
+  }));
+  if (controllable.some((d) => d.id === previous)) deviceSelect.value = previous;
+  renderCommandOptions();
+  renderPresets();
+  renderScenes();
+}
+
+function renderCommandOptions() {
+  const device = state.devices.get($("device-select").value);
+  const commandSelect = $("command-select");
+  const previous = commandSelect.value;
+  const names = device ? commandsOf(device) : [];
+  commandSelect.replaceChildren(...names.map((name) => {
+    const option = el("option", "", name);
+    option.value = name;
+    return option;
+  }));
+  if (names.includes(previous)) commandSelect.value = previous;
+  $("delay-fields").classList.toggle(cls("hidden"), commandSelect.value !== "SetDelayStart");
+}
+
+function firstOfType(type) {
+  return [...state.devices.values()].find((d) => d.device_type === type);
+}
+
+function renderPresets() {
+  const presets = [
+    ["DoorLock", "LockDoor", "Lock door"], ["DoorLock", "UnlockDoor", "Unlock door"],
+    ["LaundryDryer", "Start", "Start dryer"], ["LaundryDryer", "SetDelayStart", "Dryer: start in 4 h", { hours: 4 }],
+    ["OnOffPlug", "Toggle", "Toggle plug"], ["WaterValve", "Close", "Close water valve"],
+  ];
+  const buttons = [];
+  for (const [type, command, label, params] of presets) {
+    const device = firstOfType(type);
+    if (!device || !commandsOf(device).includes(command)) continue;
+    const button = el("button", "rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700 disabled:opacity-50", label);
+    button.type = "button";
+    button.title = `${command} on ${device.name}`;
+    button.addEventListener("click", () => runCommand(device.id, command, params || {}, button));
+    buttons.push(button);
+  }
+  $("presets").replaceChildren(...buttons);
+}
+
+function currentParams() {
+  if ($("command-select").value !== "SetDelayStart") return {};
+  return { hours: Number($("delay-hours").value), minutes: Number($("delay-minutes").value) };
+}
+
+function showResult(tone, lines) {
+  const box = $("result");
+  box.className = {
+    good: cls("mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/15 p-3 text-sm text-emerald-300"),
+    bad: cls("mt-4 rounded-lg border border-rose-500/30 bg-rose-500/15 p-3 text-sm text-rose-300"),
+    info: cls("mt-4 rounded-lg border border-slate-700 bg-slate-800 p-3 text-sm text-slate-200"),
+  }[tone];
+  box.replaceChildren(...lines.map((line, i) => el("p", i ? cls("mt-1 text-xs break-all") : cls("font-medium"), line)));
+}
+
+async function runCommand(deviceId, command, params, button) {
+  const key = newKey();
+  const device = state.devices.get(deviceId);
+  if (button) button.disabled = true;
+  showResult("info", [`Sending ${command} to ${describe(device)}…`, "Waiting for the read-back"]);
+  try {
+    const response = await api("POST", `/devices/${devicePath(deviceId)}/commands`,
+                               { command, params, idempotency_key: key });
+    const done = response.status === "done";
+    showResult(done ? "good" : "bad", [
+      `${command} ${done ? "confirmed" : "failed"} in ${response.latency_ms} ms`,
+      `via ${response.control_path || "no path"}${response.simulated ? " · simulated by the digital copy" : ""}`,
+      ...(response.error ? [response.error] : []),
+    ]);
+    if (!state.socketOpen) addLogRow({ ...response, command, params, device_id: deviceId, at: new Date().toISOString(), replayed: false });
+  } catch (error) {
+    showResult("bad", [`${command} was not run`, error.message]);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function dryRun() {
+  const deviceId = $("device-select").value;
+  const command = $("command-select").value;
+  if (!deviceId || !command) return;
+  try {
+    const result = await api("POST", `/devices/${devicePath(deviceId)}/simulate`, { command, params: currentParams() });
+    showResult(result.would_succeed ? "good" : "bad", [
+      `Dry run: ${command} would ${result.would_succeed ? "succeed" : "fail"}`,
+      `estimated ${result.estimated_latency_ms} ms via ${result.control_path || "no path"} · nothing was sent`,
+      ...(result.reason ? [result.reason] : []),
+    ]);
+  } catch (error) {
+    showResult("bad", ["Dry run failed", error.message]);
+  }
+}
+
+// ---- Offline demo mode
+
+function renderMode() {
+  const toggle = $("offline-toggle");
+  toggle.setAttribute("aria-checked", String(state.offline));
+  toggle.disabled = state.switching;
+  $("offline-label").textContent = state.switching ? "Switching…"
+    : `Offline demo mode: ${state.offline ? "on" : "off"}`;
+  $("offline-track").className = state.offline
+    ? cls("inline-flex h-5 w-9 items-center rounded-full bg-amber-500 px-0.5 transition")
+    : cls("inline-flex h-5 w-9 items-center rounded-full bg-slate-700 px-0.5 transition");
+  $("offline-knob").className = state.offline
+    ? cls("h-4 w-4 rounded-full bg-white transition translate-x-4")
+    : cls("h-4 w-4 rounded-full bg-white transition");
+  $("offline-banner").classList.toggle(cls("hidden"), !state.offline);
+  renderScenes();
+}
+
+async function loadMode() {
+  try {
+    state.offline = (await api("GET", "/demo/offline-mode")).enabled;
+  } catch (error) {
+    // The mode stays as last known; the next reconnect tries again.
+  }
+  renderMode();
+}
+
+async function toggleMode() {
+  state.switching = true;
+  renderMode();
+  try {
+    // The hub answers once running commands have finished their read-back.
+    state.offline = (await api("PUT", "/demo/offline-mode", { enabled: !state.offline })).enabled;
+  } catch (error) {
+    showResult("bad", ["Could not switch offline demo mode", error.message]);
+  } finally {
+    state.switching = false;
+    renderMode();
+    loadDevices();
+  }
+}
+
+function renderScenes() {
+  const sensor = firstOfType("WaterLeakSensor");
+  $("scene-hint").textContent = !sensor ? "No leak sensor in the registry."
+    : state.offline ? `Set ${sensor.name} in the digital copy; the Engine sees it as a real reading.`
+    : "Turn on offline demo mode to set sensor readings in the digital copy.";
+  const scenes = sensor ? [["Leak detected", true], ["Leak cleared", false]] : [];
+  $("scenes").replaceChildren(...scenes.map(([label, wet]) => {
+    const button = el("button", "rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700 disabled:opacity-50", label);
+    button.type = "button";
+    button.disabled = !state.offline;
+    button.addEventListener("click", async () => {
+      try {
+        await api("POST", `/demo/devices/${devicePath(sensor.id)}/attributes`,
+                  { cluster: "BooleanState", attribute: "StateValue", value: wet });
+      } catch (error) {
+        showResult("bad", [`Could not set ${sensor.name}`, error.message]);
+      }
+    });
+    return button;
+  }));
+}
+
+// ---- Live events
+
+function addFeed(text, at, tone) {
+  const item = el("li", "flex gap-2");
+  item.append(el("span", "shrink-0 font-mono text-slate-500", timeOf(at)), el("span", tone || "", text));
+  const feed = $("feed");
+  feed.prepend(item);
+  while (feed.children.length > MAX_FEED_ROWS) feed.lastChild.remove();
+}
+
+function addLogRow(event) {
+  if (!event.replayed) {
+    if (state.logged.has(event.idempotency_key)) return;
+    state.logged.add(event.idempotency_key);
+  }
+  const device = state.devices.get(event.device_id);
+  const row = el("tr", "text-slate-200");
+  const command = Object.keys(event.params || {}).length
+    ? `${event.command} ${JSON.stringify(event.params)}` : event.command;
+
+  const deviceCell = el("td", "py-2 pr-3");
+  deviceCell.append(el("div", "font-medium", device ? device.name : event.device_id),
+                    el("div", "text-xs text-slate-500", event.device_id));
+
+  const status = el("td", "py-2 pr-3");
+  const ok = event.status === "done";
+  const badge = el("span", ok ? cls("rounded-md bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-300")
+                              : cls("rounded-md bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-300"),
+                   ok ? "Success" : "Failed");
+  if (event.error) badge.title = event.error;
+  status.append(badge);
+  const tags = el("div", "mt-1 flex flex-wrap gap-1");
+  if (event.simulated) tags.append(el("span", "rounded-md bg-amber-500/15 px-2 py-0.5 text-xs text-amber-300", "simulated"));
+  if (event.replayed) tags.append(el("span", "rounded-md bg-slate-800 px-2 py-0.5 text-xs text-slate-400", "replay"));
+  if (tags.children.length) status.append(tags);
+  if (event.error) status.append(el("p", "mt-1 text-xs text-rose-300", event.error));
+
+  row.append(
+    el("td", "whitespace-nowrap py-2 pr-3 font-mono text-xs text-slate-400", timeOf(event.at)),
+    deviceCell,
+    el("td", "py-2 pr-3 font-mono text-xs", command),
+    el("td", "whitespace-nowrap py-2 pr-3 text-right font-mono tabular-nums", `${event.latency_ms} ms`),
+    status,
+    el("td", "whitespace-nowrap py-2 pr-3 text-xs text-slate-400", PATHS[event.source || event.control_path] || "—"),
+    el("td", "py-2 pr-3 font-mono text-xs text-slate-400 break-all", event.idempotency_key),
+  );
+  const log = $("log");
+  log.prepend(row);
+  while (log.children.length > MAX_LOG_ROWS) log.lastChild.remove();
+  state.logRows += 1;
+  $("log-count").textContent = `${state.logRows} command${state.logRows === 1 ? "" : "s"} this session`;
+}
+
+function handleEvent(event) {
+  const device = event.device_id ? state.devices.get(event.device_id) : null;
+  switch (event.type) {
+    case "state_changed": {
+      if (device) {
+        device.clusters = event.clusters;
+        device.last_updated_at = event.at;
+        updateCard(device, true);
+      }
+      const parts = Object.entries(event.changed || {}).flatMap(([, attrs]) =>
+        Object.entries(attrs).map(([name, value]) => `${name} → ${formatValue(name, value)}`));
+      addFeed(`${describe(device) || event.device_id}: ${parts.join(", ")}`, event.at);
+      break;
+    }
+    case "online_changed":
+      if (device) {
+        device.online = event.online;
+        updateCard(device, true);
+      }
+      addFeed(`${describe(device) || event.device_id} is ${event.online ? "online" : "offline"}`, event.at,
+              event.online ? cls("text-emerald-300") : cls("text-rose-300"));
+      break;
+    case "device_event":
+      addFeed(`${describe(device) || event.device_id}: ${event.cluster} ${event.event} ${JSON.stringify(event.data || {})}`, event.at);
+      break;
+    case "command_executed":
+      addLogRow(event);
+      break;
+    case "mode_changed":
+      state.offline = Boolean(event.data && event.data.offline);
+      renderMode();
+      addFeed(`Offline demo mode ${state.offline ? "on" : "off"}`, event.at, cls("text-amber-300"));
+      loadDevices();
+      break;
+    case "resync_required":
+      loadDevices();  // the hub ended this stream; the reconnect below resubscribes
+      break;
+  }
+}
+
+function setSocketStatus(label, dotClass) {
+  $("ws-label").textContent = label;
+  $("ws-dot").className = dotClass;
+}
+
+function connect() {
+  const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/events`;
+  const socket = new WebSocket(url);
+  state.socket = socket;
+  socket.addEventListener("open", () => {
+    state.socketOpen = true;
+    state.retryMs = 1000;
+    setSocketStatus("Live", cls("h-2 w-2 rounded-full bg-emerald-400"));
+    loadDevices();  // the stream starts now; reload what happened before it
+    loadMode();
+  });
+  socket.addEventListener("message", (message) => {
+    try {
+      handleEvent(JSON.parse(message.data));
+    } catch (error) {
+      console.warn("ignored an unreadable event", error);
+    }
+  });
+  socket.addEventListener("close", () => {
+    state.socketOpen = false;
+    setSocketStatus(`Reconnecting in ${Math.round(state.retryMs / 1000)} s`, cls("h-2 w-2 rounded-full bg-rose-500"));
+    setTimeout(connect, state.retryMs);
+    state.retryMs = Math.min(state.retryMs * 2, 10000);
+  });
+}
+
+// ---- Wiring
+
+$("device-select").addEventListener("change", renderCommandOptions);
+$("command-select").addEventListener("change", () =>
+  $("delay-fields").classList.toggle(cls("hidden"), $("command-select").value !== "SetDelayStart"));
+$("command-form").addEventListener("submit", (submit) => {
+  submit.preventDefault();
+  const deviceId = $("device-select").value;
+  const command = $("command-select").value;
+  if (deviceId && command) runCommand(deviceId, command, currentParams(), $("run-button"));
+});
+$("simulate-button").addEventListener("click", dryRun);
+$("offline-toggle").addEventListener("click", toggleMode);
+
+loadDevices();
+loadMode();
+connect();
+</script>
+</body>
+</html>

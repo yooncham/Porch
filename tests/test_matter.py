@@ -1,0 +1,341 @@
+"""The Matter driver against a fake Matter Server, over a real WebSocket."""
+
+import asyncio
+import json
+import socket
+
+import pytest
+from fake_matter_server import FakeMatterServer, node, running_in_thread
+from fastapi.testclient import TestClient
+
+from porch_hub.commands import UnsupportedCommand
+from porch_hub.drivers.matter import MatterBinding, MatterDriver, matter_driver_from_env
+from porch_hub.events import EventBus, SubscriberLagged
+from porch_hub.idempotency import IdempotencyStore
+from porch_hub.main import Settings, create_app
+from porch_hub.models import CommandRequest
+from porch_hub.registry import DeviceRegistry
+from porch_hub.router import CommandRouter
+from porch_hub.seed import demo_home
+
+LOCK, LEAK, PLUG, VALVE, OFFLINE = (
+    "home-1/front-door-lock", "home-1/matter-2-1", "home-1/matter-3-1", "home-1/matter-4-1", "home-1/matter-5-1")
+
+
+def nodes() -> list[dict]:
+    return [
+        node(1, {"0/40/5": "Front door", "0/40/3": "Smart Lock", "1/29/0": [{"deviceType": 10, "revision": 1}],
+                 "1/257/0": 1, "1/257/65529": [0, 1, 3]}),
+        # An older server keys struct fields by tag number.
+        node(2, {"0/40/3": "Leak Sensor", "1/29/0": [{"0": 67, "1": 1}], "1/69/0": False}),
+        # Endpoint 2 is a contact sensor: BooleanState too, but not a leak detector, so it is skipped.
+        node(3, {"0/40/5": "Desk lamp", "1/29/0": [{"deviceType": 266}], "1/6/0": False, "1/6/65529": [0, 1, 2],
+                 "2/29/0": [{"deviceType": 21}], "2/69/0": True}),
+        node(4, {"0/40/3": "Water Valve", "1/29/0": [{"deviceType": 66}], "1/129/4": 1, "1/129/65529": [0, 1]}),
+        node(5, {"0/40/3": "Plug", "1/29/0": [{"deviceType": 266}], "1/6/0": False}, available=False),
+    ]
+
+
+BINDINGS = {"1/1": MatterBinding(LOCK, "Entry")}
+
+
+class Hub:
+    def __init__(self, server: FakeMatterServer, **driver_options) -> None:
+        self.server = server
+        self.driver_options = driver_options
+
+    async def __aenter__(self) -> "Hub":
+        self.url = await self.server.start(self.driver_options.pop("port", 0))
+        self.driver = MatterDriver(self.url, bindings=BINDINGS, reconnect_delay_s=0.05, **self.driver_options)
+        self.registry = DeviceRegistry([self.driver], EventBus())
+        self.router = CommandRouter(self.registry, IdempotencyStore(), confirm_timeout_s=0.5, poll_interval_s=0.02)
+        await self.driver.start()
+        await self.registry.refresh()
+        self.events = self.registry.events.subscribe()
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        self.events.close()
+        await self.driver.stop()
+        await self.server.stop()
+
+    async def command(self, device_id: str, command: str, key: str):
+        return await self.router.execute(device_id, CommandRequest(command=command, idempotency_key=key))
+
+    async def next_event(self, type_: str):
+        while True:
+            event = await asyncio.wait_for(self.events.get(), 2)
+            if event.type == type_:
+                return event
+
+
+def run(scenario):
+    return asyncio.run(scenario())
+
+
+# Discovery
+
+def test_nodes_become_matter_named_devices():
+    async def scenario():
+        async with Hub(FakeMatterServer(nodes())) as hub:
+            return {d.id: d for d in await hub.driver.list_devices()}
+
+    devices = run(scenario)
+    assert sorted(devices) == sorted([LOCK, LEAK, PLUG, VALVE, OFFLINE])
+    lock = devices[LOCK]
+    assert (lock.name, lock.room, lock.device_type, lock.online) == ("Front door", "Entry", "DoorLock", True)
+    assert lock.clusters["DoorLock"].attributes == {"LockState": "Locked"}
+    assert lock.clusters["DoorLock"].commands == ["LockDoor", "UnlockDoor"]
+    assert devices[LEAK].device_type == "WaterLeakSensor"
+    assert devices[LEAK].clusters["BooleanState"].attributes == {"StateValue": False}
+    plug = devices[PLUG]
+    assert (plug.name, plug.device_type) == ("Desk lamp", "OnOffPlug")  # one supported endpoint, no suffix
+    assert plug.clusters["OnOff"].commands == ["Off", "On", "Toggle"]
+    assert devices[VALVE].clusters["ValveConfigurationAndControl"].attributes == {"CurrentState": "Open"}
+    assert devices[OFFLINE].online is False
+
+
+def test_accepted_command_list_limits_commands():
+    plug = node(7, {"1/29/0": [{"deviceType": 266}], "1/6/0": True, "1/6/65529": [0, 1]})  # no Toggle
+
+    async def scenario():
+        async with Hub(FakeMatterServer([plug])) as hub:
+            device = (await hub.driver.list_devices())[0]
+            with pytest.raises(UnsupportedCommand):  # the hub answers 422 before anything is sent
+                await hub.command(device.id, "Toggle", "k")
+            return device
+
+    assert run(scenario).clusters["OnOff"].commands == ["Off", "On"]
+
+
+# Commands
+
+def test_lock_and_unlock_are_timed_invokes_confirmed_by_read_back():
+    async def scenario():
+        async with Hub(FakeMatterServer(nodes())) as hub:
+            unlocked = await hub.command(LOCK, "UnlockDoor", "k1")
+            locked = await hub.command(LOCK, "LockDoor", "k2")
+            return unlocked, locked, hub.server
+
+    unlocked, locked, server = run(scenario)
+    assert unlocked.status == "done" and unlocked.state_after["DoorLock"].attributes["LockState"] == "Unlocked"
+    assert locked.status == "done" and locked.state_after["DoorLock"].attributes["LockState"] == "Locked"
+    sent = server.commands("device_command")
+    assert sent[0] == {"node_id": 1, "endpoint_id": 1, "cluster_id": 257, "command_name": "UnlockDoor",
+                       "payload": {}, "timed_request_timeout_ms": 5000}
+    # The read-back is a fresh read from the device, not the cache.
+    assert {"node_id": 1, "attribute_path": ["1/257/0"]} in server.commands("read_attribute")
+
+
+def test_on_off_toggle():
+    async def scenario():
+        async with Hub(FakeMatterServer(nodes())) as hub:
+            results = [await hub.command(PLUG, cmd, f"k{i}") for i, cmd in enumerate(["On", "Off", "Toggle"])]
+            return results, hub.server.commands("device_command")
+
+    results, sent = run(scenario)
+    assert [r.state_after["OnOff"].attributes["OnOff"] for r in results] == [True, False, True]
+    assert all(r.status == "done" for r in results)
+    assert all("timed_request_timeout_ms" not in args for args in sent)
+
+
+def test_device_rejection_and_unresponsive_device_fail():
+    server = FakeMatterServer(nodes())
+    server.rejections["UnlockDoor"] = {"error_code": 0, "details": "Command failed", "status": 1}
+
+    async def scenario():
+        async with Hub(server) as hub:
+            rejected = await hub.command(LOCK, "UnlockDoor", "k1")
+            hub.server.unresponsive = True
+            ignored = await hub.command(PLUG, "On", "k2")
+            return rejected, ignored
+
+    rejected, ignored = run(scenario)
+    assert rejected.status == "failed" and "Matter status 0x01" in rejected.error
+    assert ignored.status == "failed" and "did not report OnOff" in ignored.error
+
+
+def test_offline_node_fails_without_sending():
+    async def scenario():
+        async with Hub(FakeMatterServer(nodes())) as hub:
+            result = await hub.command(OFFLINE, "On", "k")
+            return result, hub.server.commands("device_command")
+
+    result, sent = run(scenario)
+    assert result.status == "failed" and "not reachable" in result.error
+    assert sent == []
+
+
+# Live updates and events
+
+def test_leak_detected_updates_registry_and_emits_event():
+    async def scenario():
+        async with Hub(FakeMatterServer(nodes())) as hub:
+            await hub.server.set_attribute(2, "1/69/0", True)
+            event = await hub.next_event("state_changed")
+            return event, hub.registry.get(LEAK)
+
+    event, leak = run(scenario)
+    assert (event.device_id, event.source) == (LEAK, "matter")
+    assert event.changed == {"BooleanState": {"StateValue": True}}
+    assert leak.clusters["BooleanState"].attributes["StateValue"] is True
+
+
+def test_manual_lock_turn_emits_state_and_lock_operation():
+    async def scenario():
+        async with Hub(FakeMatterServer(nodes())) as hub:
+            await hub.server.set_attribute(1, "1/257/0", 2)
+            await hub.server.node_event(1, 1, 257, 2, {"lockOperationType": 1, "operationSource": 1})
+            state = await hub.next_event("state_changed")
+            operation = await hub.next_event("device_event")
+            return state, operation, hub.registry.get(LOCK)
+
+    state, operation, lock = run(scenario)
+    assert state.changed == {"DoorLock": {"LockState": "Unlocked"}}
+    assert (operation.cluster, operation.event) == ("DoorLock", "LockOperation")
+    assert operation.data == {"lockOperationType": 1, "operationSource": 1}
+    assert lock.clusters["DoorLock"].attributes["LockState"] == "Unlocked"
+
+
+def test_boolean_state_change_event_alone_updates_state():
+    async def scenario():
+        async with Hub(FakeMatterServer(nodes())) as hub:
+            await hub.server.node_event(2, 1, 69, 0, {"stateValue": True})
+            state = await hub.next_event("state_changed")
+            change = await hub.next_event("device_event")
+            return state, change
+
+    state, change = run(scenario)
+    assert state.changed == {"BooleanState": {"StateValue": True}}
+    assert (change.cluster, change.event) == ("BooleanState", "StateChange")
+
+
+def test_node_going_offline_emits_online_changed():
+    async def scenario():
+        async with Hub(FakeMatterServer(nodes())) as hub:
+            await hub.server.set_available(3, False)
+            event = await hub.next_event("online_changed")
+            return event, hub.registry.get(PLUG)
+
+    event, plug = run(scenario)
+    assert (event.device_id, event.online, plug.online) == (PLUG, False, False)
+
+
+def test_reconnect_resyncs_changes_made_while_disconnected():
+    async def scenario():
+        async with Hub(FakeMatterServer(nodes())) as hub:
+            await hub.server.drop_connections()
+            offline = await hub.next_event("online_changed")
+            hub.server.nodes[2]["attributes"]["1/69/0"] = True  # reported while the hub was away
+            leak = await hub.next_event("state_changed")
+            back = await hub.next_event("online_changed")
+            return offline, leak, back
+
+    offline, leak, back = run(scenario)
+    assert offline.online is False
+    assert (leak.device_id, leak.changed) == (LEAK, {"BooleanState": {"StateValue": True}})
+    assert back.online is True
+
+
+def test_hub_starts_before_the_matter_server():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    async def scenario():
+        server = FakeMatterServer(nodes())
+        driver = MatterDriver(f"ws://127.0.0.1:{port}/ws", connect_timeout_s=0.1, reconnect_delay_s=0.05)
+        await driver.start()  # returns although nothing is listening yet
+        before = await driver.list_devices()
+        await server.start(port)
+        for _ in range(100):
+            if await driver.list_devices():
+                break
+            await asyncio.sleep(0.02)
+        after = await driver.list_devices()
+        await driver.stop()
+        await server.stop()
+        return before, after
+
+    before, after = run(scenario)
+    assert before == [] and len(after) == 5
+
+
+def test_old_server_schema_is_refused():
+    async def scenario():
+        async with Hub(FakeMatterServer(nodes(), schema_version=10), connect_timeout_s=0.2) as hub:
+            return await hub.driver.list_devices()
+
+    assert run(scenario) == []
+
+
+# /events WebSocket
+
+def test_events_websocket_streams_matter_pushes():
+    server = FakeMatterServer(nodes())
+    with running_in_thread(server) as (url, call):
+        driver = MatterDriver(url, bindings=BINDINGS)
+        with TestClient(create_app([driver], Settings())) as client, client.websocket_connect("/events") as ws:
+            call(server.set_attribute(2, "1/69/0", True))
+            event = ws.receive_json()
+    assert event["type"] == "state_changed" and event["device_id"] == LEAK
+    assert event["changed"] == {"BooleanState": {"StateValue": True}}
+    assert "online" not in event  # unset fields are left out
+
+
+def test_events_websocket_streams_command_results_from_any_platform():
+    home = demo_home(simulate_latency=False)
+    with TestClient(create_app(home.drivers, Settings())) as client, client.websocket_connect("/events") as ws:
+        client.post("/devices/home-1/space-heater-plug/commands", json={"command": "On", "idempotency_key": "k"})
+        event = ws.receive_json()
+    assert (event["device_id"], event["source"]) == ("home-1/space-heater-plug", "google_home")
+    assert event["changed"] == {"OnOff": {"OnOff": True}}
+
+
+def test_a_lagging_subscriber_is_ended_not_silently_thinned():
+    bus = EventBus(max_queue=2)
+    with bus.subscribe() as subscription:
+        for i in range(3):
+            bus.publish("online_changed", f"d{i}", "matter", online=True)
+        assert subscription.lagged
+        with pytest.raises(SubscriberLagged):
+            asyncio.run(subscription.get())
+        bus.publish("online_changed", "later", "matter", online=True)  # nothing more is queued
+        with pytest.raises(SubscriberLagged):
+            asyncio.run(subscription.get())
+    with bus.subscribe() as fresh:  # a new subscription starts clean
+        bus.publish("online_changed", "d9", "matter", online=True)
+        assert asyncio.run(fresh.get()).device_id == "d9"
+
+
+def test_events_websocket_tells_a_lagging_client_to_resync():
+    from porch_hub.api import _send_events
+
+    class StubSocket:
+        def __init__(self):
+            self.sent, self.closed = [], None
+
+        async def send_text(self, text):
+            self.sent.append(json.loads(text))
+
+        async def send_json(self, data):
+            self.sent.append(data)
+
+        async def close(self, code):
+            self.closed = code
+
+    bus = EventBus(max_queue=2)
+    socket_ = StubSocket()
+    with bus.subscribe() as subscription:
+        for i in range(3):  # the client has not read anything yet
+            bus.publish("online_changed", f"d{i}", "matter", online=True)
+        asyncio.run(_send_events(socket_, subscription))
+    assert [m.get("type") for m in socket_.sent] == ["resync_required"]
+    assert socket_.closed == 1013
+
+
+def test_driver_from_env():
+    driver = matter_driver_from_env({"MATTER_SERVER_URL": "ws://home-node:5580/ws",
+                                     "MATTER_BINDINGS": '{"1/1": {"porch_id": "home-1/front-door-lock", "room": "Entry"}}'})
+    assert driver._client._url == "ws://home-node:5580/ws"
+    assert driver._bindings == BINDINGS

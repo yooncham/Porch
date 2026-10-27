@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Porch · Live Home</title>
+<link rel="icon" href="data:,">
+<!--
+  Stage display for a projector. Self-contained on purpose: no CDN, no web fonts, no network
+  request except to the hub that serves it and the Engine it is pointed at, so a venue without
+  internet changes nothing.
+
+  Sources:
+    hub     /ws/events on this origin: device state, dry runs (command_simulated), executions.
+    Engine  ?engine=ws://host:port/path: agents, safety events, plain-language audit entries.
+            The message contract is in the README ("Stage display").
+  Presenter: press P for scripted scenes (1 to 5), C to clear alerts, F for full screen.
+  Device roles can be pinned with ?lock=<id>&appliance=<id>&leak=<id>&plug=<id>&valve=<id>.
+-->
+<style>
+:root{
+  --bg:#000;--panel:#0a0a0d;--panel-2:#121218;--line:#2b2b36;--text:#fff;--muted:#c9c9d6;--dim:#8d8d9c;
+  --ok:#22e07a;--warn:#ffc531;--bad:#ff3b4a;--info:#3cc4ff;--violet:#b49cff;
+  --ok-bg:#062a16;--warn-bg:#2e2300;--bad-bg:#330009;--info-bg:#00243a;--violet-bg:#1d1440;
+}
+*,::before,::after{box-sizing:border-box}
+/* Type scales with the screen, by width and height, so 720p looks like a smaller 1080p. */
+html{font-size:clamp(12px,min(1vw,1.78vh),26px);background:var(--bg)}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  line-height:1.35;-webkit-font-smoothing:antialiased}
+h1,h2,h3,p,ol,ul{margin:0;padding:0}
+ol,ul{list-style:none}
+button{font:inherit;color:inherit;cursor:pointer}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.hidden{display:none !important}
+
+/* Header */
+.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:1rem;padding:.9rem 1.5rem;border-bottom:2px solid var(--line)}
+.brand{display:flex;align-items:baseline;gap:1rem}
+.logo{font-size:2rem;font-weight:900;letter-spacing:.14em}
+.brand-sub{font-size:1.05rem;color:var(--muted)}
+.status{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem}
+.pill{display:inline-flex;align-items:center;gap:.5rem;padding:.35rem .9rem;border:2px solid var(--line);border-radius:999px;font-size:.95rem;font-weight:700;color:var(--muted)}
+.dot{width:.75rem;height:.75rem;border-radius:50%;background:var(--dim)}
+.pill.ok .dot{background:var(--ok)}.pill.bad .dot{background:var(--bad)}.pill.warn .dot{background:var(--warn)}
+.pill.mode-live{border-color:var(--ok);color:var(--ok)}
+.pill.mode-copy{border-color:var(--warn);color:var(--warn);background:var(--warn-bg)}
+.clock{font-size:1.6rem;font-weight:800;padding-left:.5rem}
+
+/* Agents */
+.agents{display:flex;flex-wrap:wrap;align-items:center;gap:.8rem;padding:.9rem 1.5rem;border-bottom:2px solid var(--line);background:var(--panel)}
+.section-label{font-size:.95rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.agent-list{display:flex;flex-wrap:wrap;gap:.8rem}
+.agent{display:inline-flex;align-items:center;gap:.7rem;padding:.45rem .6rem .45rem .9rem;border:2px solid var(--line);border-radius:.8rem;background:var(--panel-2)}
+.agent-name{font-size:1.25rem;font-weight:800}
+.agent .dot{background:var(--ok)}
+.scope{padding:.25rem .7rem;border-radius:.5rem;font-size:.95rem;font-weight:800;letter-spacing:.02em}
+.scope.limited{background:var(--info-bg);color:var(--info);border:2px solid var(--info)}
+.scope.full{background:var(--violet-bg);color:var(--violet);border:2px solid var(--violet)}
+.empty{color:var(--dim);font-size:1.1rem}
+
+/* Safety alerts */
+.alerts{padding:0 1.5rem}
+.alert{display:flex;gap:1.2rem;align-items:flex-start;margin-top:1rem;padding:1.1rem 1.4rem;border:3px solid;border-radius:1rem}
+.alert .mark{flex:none;display:grid;place-items:center;width:3.2rem;height:3.2rem;border-radius:50%;font-size:2rem;font-weight:900;color:#000}
+.alert-title{font-size:2.1rem;font-weight:900;letter-spacing:.03em;text-transform:uppercase}
+.alert-detail{margin-top:.3rem;font-size:1.6rem;font-weight:600}
+.alert-time{margin-left:auto;font-size:1.1rem;color:var(--muted)}
+.alert.bad{border-color:var(--bad);background:var(--bad-bg)}.alert.bad .mark{background:var(--bad)}.alert.bad .alert-title{color:var(--bad)}
+.alert.warn{border-color:var(--warn);background:var(--warn-bg)}.alert.warn .mark{background:var(--warn)}.alert.warn .alert-title{color:var(--warn)}
+.alert.violet{border-color:var(--violet);background:var(--violet-bg)}.alert.violet .mark{background:var(--violet)}.alert.violet .alert-title{color:var(--violet)}
+.alert.info{border-color:var(--info);background:var(--info-bg)}.alert.info .mark{background:var(--info)}.alert.info .alert-title{color:var(--info)}
+.alert.older{padding:.5rem 1rem;margin-top:.5rem;border-width:2px;align-items:center}
+.alert.older .mark{width:1.8rem;height:1.8rem;font-size:1.1rem}
+.alert.older .alert-title{font-size:1.1rem}.alert.older .alert-detail{margin:0 0 0 .6rem;font-size:1.1rem}
+.alert.older .alert-body{display:flex;flex-wrap:wrap;align-items:baseline}
+.alert.fresh{animation:arrive .5s ease-out}
+@keyframes arrive{from{transform:translateY(-.6rem);opacity:.2}to{transform:none;opacity:1}}
+
+/* Main grid */
+.grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,4fr) minmax(0,4fr);gap:1.2rem;padding:1.2rem 1.5rem 1.5rem}
+.panel{min-width:0;padding:1.1rem;border:2px solid var(--line);border-radius:1rem;background:var(--panel)}
+.panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:.8rem;margin-bottom:1rem}
+.panel-title{font-size:1.5rem;font-weight:900}
+.panel-note{font-size:1rem;color:var(--muted)}
+
+/* Hardware mirror */
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem}
+.tile{padding:.8rem 1rem;border:2px solid var(--line);border-radius:.9rem;background:var(--panel-2);transition:border-color .3s,box-shadow .3s}
+.tile.changed{border-color:var(--info);box-shadow:0 0 0 3px var(--info)}
+.tile.offline{opacity:.45}
+.tile-role{font-size:.95rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.tile-state{margin-top:.25rem;font-size:2rem;font-weight:900;line-height:1.1;white-space:nowrap}
+.tile-state.long{font-size:1.6rem;white-space:normal}
+.tile-name{margin-top:.3rem;font-size:1.05rem;font-weight:600}
+.tile-meta{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem}
+.tag{padding:.15rem .55rem;border-radius:.4rem;border:2px solid var(--line);font-size:.85rem;font-weight:700;color:var(--muted)}
+.tag.local{border-color:var(--ok);color:var(--ok)}.tag.cloud{border-color:var(--info);color:var(--info)}.tag.off{border-color:var(--bad);color:var(--bad)}
+.tone-ok{color:var(--ok)}.tone-warn{color:var(--warn)}.tone-bad{color:var(--bad)}.tone-info{color:var(--info)}.tone-plain{color:var(--text)}
+.tile.alarm{border-color:var(--bad);background:var(--bad-bg);animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 6px rgba(255,59,74,.45)}}
+
+/* Digital copy */
+.predictions{display:flex;flex-direction:column;gap:.8rem}
+.prediction{padding:.9rem 1rem;border:2px solid var(--line);border-left-width:.5rem;border-radius:.8rem;background:var(--panel-2)}
+.prediction.predicted{border-left-color:var(--info)}.prediction.matched{border-left-color:var(--ok)}
+.prediction.differs{border-left-color:var(--warn)}.prediction.blocked,.prediction.failed,.prediction.refused{border-left-color:var(--bad)}
+.pred-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:.6rem}
+.pred-device{font-size:1.3rem;font-weight:800}
+.pred-command{font-size:1.1rem;color:var(--muted)}
+.chip{margin-left:auto;padding:.2rem .6rem;border-radius:.4rem;font-size:.85rem;font-weight:900;letter-spacing:.06em;color:#000}
+.chip.predicted{background:var(--info)}.chip.matched{background:var(--ok)}.chip.differs{background:var(--warn)}
+.chip.blocked,.chip.failed,.chip.refused{background:var(--bad)}
+.diff{margin-top:.6rem}
+.diff li{display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem;font-size:1.25rem}
+.diff .attr{color:var(--muted);font-size:1rem}
+.diff .from{color:var(--dim);text-decoration:line-through}
+.diff .arrow{color:var(--muted)}
+.diff .to{font-weight:900;color:var(--info)}
+.pred-foot{margin-top:.5rem;font-size:1rem;color:var(--muted)}
+
+/* Audit */
+.audit-list{display:flex;flex-direction:column;gap:.7rem;max-height:62vh;overflow:hidden}
+.entry{display:grid;grid-template-columns:auto minmax(0,1fr);gap:.2rem .8rem;padding-bottom:.7rem;border-bottom:1px solid var(--line)}
+.entry.fresh{animation:arrive .5s ease-out}
+.entry-time{font-size:1.05rem;color:var(--muted);padding-top:.15rem}
+.entry-text{font-size:1.3rem;font-weight:600}
+.entry-agent{font-weight:900}
+.entry-tags{grid-column:2;display:flex;flex-wrap:wrap;gap:.4rem}
+.entry.hub .entry-text{font-size:1.05rem;font-weight:500;color:var(--muted)}
+.outcome{padding:.1rem .5rem;border-radius:.4rem;font-size:.85rem;font-weight:900;letter-spacing:.05em;color:#000}
+.outcome.done{background:var(--ok)}.outcome.blocked,.outcome.failed{background:var(--bad)}.outcome.pending_approval{background:var(--warn)}
+.saving{padding:.1rem .5rem;border-radius:.4rem;font-size:.85rem;font-weight:900;color:var(--ok);border:2px solid var(--ok)}
+
+/* Presenter drawer: for the person on stage, not the audience */
+.presenter-toggle{position:fixed;right:.8rem;bottom:.8rem;padding:.3rem .7rem;border:1px solid var(--line);border-radius:.5rem;background:transparent;font-size:.8rem;color:var(--dim);opacity:.5}
+.presenter{position:fixed;right:.8rem;bottom:3rem;width:min(30rem,calc(100vw - 1.6rem));padding:1rem;border:2px solid var(--line);border-radius:1rem;background:var(--panel-2);box-shadow:0 1rem 3rem #000}
+.presenter h2{font-size:1.1rem;font-weight:900}
+.presenter p{margin-top:.4rem;font-size:.9rem;color:var(--muted)}
+.scene-list{display:grid;gap:.5rem;margin-top:.8rem}
+.scene{display:flex;gap:.6rem;align-items:center;padding:.55rem .8rem;border:2px solid var(--line);border-radius:.6rem;background:var(--panel);text-align:left;font-size:1rem;font-weight:700}
+.scene:hover{border-color:var(--info)}
+.scene:disabled{opacity:.5;cursor:wait}
+.key{display:inline-grid;place-items:center;min-width:1.6rem;height:1.6rem;border-radius:.35rem;background:var(--line);font-size:.85rem}
+.presenter-row{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.8rem}
+.presenter-row button,.presenter-row input{padding:.45rem .7rem;border:2px solid var(--line);border-radius:.5rem;background:var(--panel);font-size:.9rem;color:var(--text)}
+.presenter-row input{flex:1;min-width:12rem;font-family:ui-monospace,Menlo,monospace}
+#presenter-note{min-height:1.2rem;color:var(--warn)}
+
+/* On a projector-sized screen the whole display fits one screen: nothing scrolls on stage. */
+@media (min-width:1100px) and (min-height:650px){
+  body{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  .grid{flex:1;min-height:0}
+  .panel{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .tiles,.predictions,.audit-list{min-height:0;overflow:hidden}
+  .audit-list{max-height:none}
+  /* Rolling feeds fade out at the bottom instead of cutting a line in half. */
+  .predictions,.audit-list{-webkit-mask-image:linear-gradient(to bottom,#000 82%,transparent);mask-image:linear-gradient(to bottom,#000 82%,transparent)}
+  .tiles{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (max-width:1100px){.grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.panel.audit{grid-column:1/-1}}
+@media (max-width:720px){.grid{grid-template-columns:minmax(0,1fr)}.tiles{grid-template-columns:minmax(0,1fr)}.alert-title{font-size:1.5rem}.alert-detail{font-size:1.2rem}}
+@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="logo">PORCH</span>
+    <span class="brand-sub">Live home · every agent action checked before it reaches hardware</span>
+  </div>
+  <div class="status">
+    <span id="hub-pill" class="pill"><span class="dot"></span><span id="hub-label">Hub</span></span>
+    <span id="engine-pill" class="pill"><span class="dot"></span><span id="engine-label">Engine</span></span>
+    <span id="mode-pill" class="pill mode-live">LIVE HARDWARE</span>
+    <span id="clock" class="clock mono">--:--:--</span>
+  </div>
+</header>
+
+<section class="agents" aria-label="Active agents">
+  <span class="section-label">Active agents</span>
+  <div id="agents" class="agent-list"><span class="empty">No agent connected</span></div>
+</section>
+
+<section id="alerts" class="alerts" aria-live="assertive" aria-label="Safety alerts"></section>
+
+<main class="grid">
+  <section class="panel mirror" aria-labelledby="mirror-title">
+    <div class="panel-head">
+      <h2 id="mirror-title" class="panel-title">Physical home</h2>
+      <span class="panel-note">live hardware state</span>
+    </div>
+    <div id="tiles" class="tiles"></div>
+  </section>
+
+  <section class="panel copy" aria-labelledby="copy-title">
+    <div class="panel-head">
+      <h2 id="copy-title" class="panel-title">Digital copy</h2>
+      <span class="panel-note">predicted before hardware moves</span>
+    </div>
+    <div id="predictions" class="predictions"><p class="empty">Waiting for the next dry run…</p></div>
+  </section>
+
+  <section class="panel audit" aria-labelledby="audit-title">
+    <div class="panel-head">
+      <h2 id="audit-title" class="panel-title">What happened</h2>
+      <span class="panel-note">plain-language audit</span>
+    </div>
+    <ol id="audit" class="audit-list"></ol>
+  </section>
+</main>
+
+<button id="presenter-toggle" class="presenter-toggle" type="button" aria-controls="presenter">Presenter (P)</button>
+<aside id="presenter" class="presenter hidden" aria-label="Presenter controls">
+  <h2>Scripted scenes</h2>
+  <p>For rehearsal or as a backup: each scene sends the same messages the Engine would, and runs the real hub
+     dry runs and commands. The Engine pill reads SCRIPTED while they are in use.</p>
+  <div id="scenes" class="scene-list"></div>
+  <p id="presenter-note"></p>
+  <div class="presenter-row">
+    <input id="engine-url" type="text" placeholder="ws://engine-host:port/events" aria-label="Engine WebSocket URL">
+    <button id="engine-connect" type="button">Connect Engine</button>
+  </div>
+  <div class="presenter-row">
+    <button id="clear-alerts" type="button">Clear alerts (C)</button>
+    <button id="fullscreen" type="button">Full screen (F)</button>
+  </div>
+</aside>
+
+<script>
+"use strict";
+
+// ---- Helpers. Text from devices and agents is only ever set as text, never as markup.
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined && text !== null) node.textContent = String(text);
+  return node;
+}
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const params = new URLSearchParams(location.search);
+
+function clock(iso) {
+  const at = iso ? new Date(iso) : new Date();
+  return at.toLocaleTimeString([], { hour12: false });
+}
+
+function devicePath(id) {
+  return id.split("/").map(encodeURIComponent).join("/");
+}
+
+async function hub(method, path, body) {
+  const response = await fetch(path, {
+    method,
+    headers: body ? { "content-type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data));
+  return data;
+}
+
+const PATH_LABELS = { matter: ["Matter · local", "local"], google_home: ["Google · cloud", "cloud"], lg_thinq: ["LG ThinQ · cloud", "cloud"] };
+
+// ---- State
+
+const state = {
+  devices: new Map(),
+  agents: new Map(),
+  predictions: [],     // newest first
+  offline: false,
+  engineLive: false,
+  scripted: false,
+};
+
+// ---- Hardware mirror
+
+const ROLES = [
+  { key: "lock", label: "Smart lock", types: ["DoorLock"] },
+  { key: "appliance", label: "LG appliance", types: ["LaundryDryer", "LaundryWasher", "RoboticVacuumCleaner", "AirPurifier"] },
+  { key: "leak", label: "Water leak sensor", types: ["WaterLeakSensor"] },
+  { key: "plug", label: "Smart plug", types: ["OnOffPlug", "OnOffLight"], prefer: /heater/i },
+  { key: "valve", label: "Water valve", types: ["WaterValve"] },
+];
+
+function roleDevice(role) {
+  const pinned = params.get(role.key);
+  if (pinned && state.devices.has(pinned)) return state.devices.get(pinned);
+  const candidates = [...state.devices.values()].filter((d) => role.types.includes(d.device_type));
+  candidates.sort((a, b) => role.types.indexOf(a.device_type) - role.types.indexOf(b.device_type));
+  return (role.prefer && candidates.find((d) => role.prefer.test(d.name))) || candidates[0];
+}
+
+function attr(device, cluster, name) {
+  const c = device.clusters[cluster];
+  return c ? c.attributes[name] : undefined;
+}
+
+// What the audience reads: one big word and a tone.
+function readout(device) {
+  switch (device.device_type) {
+    case "DoorLock": {
+      const lock = attr(device, "DoorLock", "LockState");
+      return lock === "Locked" ? ["LOCKED", "ok"] : lock === "Unlocked" ? ["UNLOCKED", "warn"] : [String(lock || "UNKNOWN").toUpperCase(), "warn"];
+    }
+    case "WaterLeakSensor": {
+      const wet = attr(device, "BooleanState", "StateValue");
+      return wet === true ? ["LEAK DETECTED", "bad", true] : wet === false ? ["DRY", "ok"] : ["UNKNOWN", "warn"];
+    }
+    case "WaterValve": {
+      const valve = attr(device, "ValveConfigurationAndControl", "CurrentState");
+      return valve === "Open" ? ["OPEN", "info"] : valve === "Closed" ? ["CLOSED", "warn"] : [String(valve || "UNKNOWN").toUpperCase(), "warn"];
+    }
+    case "OnOffPlug": case "OnOffLight": case "AirPurifier": {
+      const on = attr(device, "OnOff", "OnOff");
+      if (device.device_type !== "AirPurifier" || on !== undefined) return on === true ? ["ON", "info"] : on === false ? ["OFF", "plain"] : ["UNKNOWN", "warn"];
+      break;
+    }
+  }
+  const op = attr(device, "OperationalState", "OperationalState") ?? attr(device, "RvcOperationalState", "OperationalState");
+  const delay = attr(device, "PorchLaundryExtension", "RelativeHourToStart");
+  if (op === "Stopped" && delay > 0) return ["DELAYED", "info"];
+  const tones = { Running: "info", Paused: "warn", Error: "bad", Unknown: "warn", Charging: "plain", Docked: "plain", SeekingCharger: "info" };
+  return [String(op || "UNKNOWN").replace(/([a-z])([A-Z])/g, "$1 $2").toUpperCase(), tones[op] || "plain"];
+}
+
+function renderTiles(changedId) {
+  const tiles = ROLES.map((role) => {
+    const device = roleDevice(role);
+    const tile = el("article", "tile");
+    tile.append(el("div", "tile-role", role.label));
+    if (!device) {
+      tile.append(el("div", "tile-state tone-plain", "—"), el("div", "tile-name", "Not in the registry"));
+      return tile;
+    }
+    const [word, tone, alarm] = readout(device);
+    if (alarm) tile.classList.add("alarm");
+    if (!device.online) tile.classList.add("offline");
+    if (device.id === changedId) tile.classList.add("changed");
+    tile.append(el("div", `tile-state tone-${tone}${word.length > 8 ? " long" : ""}`, word),
+                el("div", "tile-name", `${device.name} · ${device.room}`));
+    const meta = el("div", "tile-meta");
+    const [label, kind] = PATH_LABELS[device.primary_control_path] || [device.primary_control_path, "cloud"];
+    meta.append(el("span", `tag ${kind}`, label));
+    if (device.control_paths.length > 1) meta.append(el("span", "tag", `+${device.control_paths.length - 1} fallback`));
+    if (!device.online) meta.append(el("span", "tag off", "OFFLINE"));
+    const delay = attr(device, "PorchLaundryExtension", "RelativeHourToStart");
+    if (delay > 0) meta.append(el("span", "tag cloud", `starts in ${delay} h`));
+    if (attr(device, "PorchLaundryExtension", "RemoteStartAllowed") === false) meta.append(el("span", "tag off", "REMOTE START OFF"));
+    tile.append(meta);
+    return tile;
+  });
+  $("tiles").replaceChildren(...tiles);
+  if (changedId) setTimeout(() => document.querySelectorAll(".tile.changed").forEach((t) => t.classList.remove("changed")), 1500);
+}
+
+async function loadDevices() {
+  try {
+    const list = await hub("GET", "/devices");
+    state.devices = new Map(list.map((d) => [d.id, d]));
+    renderTiles();
+    state.offline = (await hub("GET", "/demo/offline-mode")).enabled;
+    renderMode();
+  } catch (error) {
+    setPill("hub", "bad", "Hub unreachable");
+  }
+}
+
+function renderMode() {
+  const pill = $("mode-pill");
+  pill.className = state.offline ? "pill mode-copy" : "pill mode-live";
+  pill.textContent = state.offline ? "DIGITAL COPY · OFFLINE" : "LIVE HARDWARE";
+}
+
+// ---- Digital copy predictions
+
+const VALUE_NAMES = { true: "true", false: "false" };
+function show(value) {
+  return value === null || value === undefined ? "—" : VALUE_NAMES[value] ?? String(value);
+}
+
+function addPrediction(event) {
+  const device = state.devices.get(event.device_id);
+  const changes = [];
+  for (const [cluster, predicted] of Object.entries(event.clusters || {})) {
+    for (const [name, to] of Object.entries(predicted.attributes)) {
+      const from = device ? attr(device, cluster, name) : undefined;
+      if (from !== to) changes.push({ cluster, name, from, to });
+    }
+  }
+  state.predictions.unshift({
+    deviceId: event.device_id, device: device ? device.name : event.device_id, command: event.command,
+    params: event.params || {}, changes, wouldSucceed: event.would_succeed, reason: event.error,
+    estimate: event.latency_ms, path: event.source, status: event.would_succeed ? "predicted" : "refused",
+    detail: null, at: Date.now(),
+  });
+  state.predictions.length = Math.min(state.predictions.length, 5);
+  renderPredictions();
+}
+
+function settlePrediction(deviceId, command, status, detail, actual) {
+  const pending = state.predictions.find((p) => p.deviceId === deviceId && p.command === command
+                                              && p.status === "predicted" && Date.now() - p.at < 120000);
+  if (!pending) return;
+  if (status === "executed") {
+    const matched = pending.changes.every((c) => actual && actual[c.cluster] && actual[c.cluster].attributes[c.name] === c.to);
+    pending.status = matched ? "matched" : "differs";
+  } else {
+    pending.status = status;
+  }
+  pending.detail = detail;
+  renderPredictions();
+}
+
+const CHIPS = { predicted: "PREDICTED", matched: "EXECUTED · AS PREDICTED", differs: "EXECUTED · DIFFERENT",
+                blocked: "BLOCKED · NOT SENT", failed: "FAILED", refused: "WOULD FAIL" };
+
+function renderPredictions() {
+  if (!state.predictions.length) {
+    $("predictions").replaceChildren(el("p", "empty", "Waiting for the next dry run…"));
+    return;
+  }
+  $("predictions").replaceChildren(...state.predictions.map((p) => {
+    const card = el("article", `prediction ${p.status}`);
+    const head = el("div", "pred-head");
+    const args = Object.keys(p.params).length ? ` ${Object.entries(p.params).map(([k, v]) => `${k} ${v}`).join(", ")}` : "";
+    head.append(el("span", "pred-device", p.device), el("span", "pred-command mono", `${p.command}${args}`),
+                el("span", `chip ${p.status}`, CHIPS[p.status]));
+    card.append(head);
+    if (p.changes.length) {
+      const diff = el("ul", "diff");
+      for (const c of p.changes) {
+        const row = el("li");
+        row.append(el("span", "attr", c.name), el("span", "from", show(c.from)), el("span", "arrow", "→"), el("span", "to", show(c.to)));
+        diff.append(row);
+      }
+      card.append(diff);
+    }
+    const [label] = PATH_LABELS[p.path] || [p.path || "no path"];
+    const foot = p.status === "refused" ? `Would fail: ${p.reason}` : `Estimated ${p.estimate} ms via ${label}`;
+    card.append(el("p", "pred-foot", p.detail ? `${foot} · ${p.detail}` : foot));
+    return card;
+  }));
+}
+
+// ---- Safety alerts
+
+const ALERT_TONES = { prompt_injection: "bad", emergency_override: "warn", arbitration: "violet" };
+const ALERT_MARKS = { bad: "!", warn: "!", violet: "⇄", info: "i" };
+
+function showAlert(event) {
+  const tone = ALERT_TONES[event.kind] || (event.severity === "critical" ? "bad" : "info");
+  const alert = el("div", `alert ${tone} fresh`);
+  const body = el("div", "alert-body");
+  body.append(el("div", "alert-title", event.title || event.kind), el("div", "alert-detail", event.detail || ""));
+  alert.append(el("span", "mark", ALERT_MARKS[tone]), body, el("span", "alert-time mono", clock(event.at)));
+  const zone = $("alerts");
+  zone.querySelectorAll(".alert").forEach((a) => a.classList.add("older"));
+  zone.prepend(alert);
+  while (zone.children.length > 3) zone.lastChild.remove();
+  if (event.device_id && event.command) settlePrediction(event.device_id, event.command, "blocked", "stopped by Porch");
+}
+
+// ---- Audit stream
+
+function addAudit({ at, summary, agentName, outcome, savings, hubLine }) {
+  const entry = el("li", hubLine ? "entry hub fresh" : "entry fresh");
+  const text = el("div", "entry-text");
+  const lead = agentName && [agentName, agentName.split(" ")[0]].find((n) => summary.startsWith(n));
+  if (lead) {
+    text.append(el("span", "entry-agent", lead), document.createTextNode(summary.slice(lead.length)));
+  } else {
+    text.textContent = summary;
+  }
+  entry.append(el("span", "entry-time mono", clock(at)), text);
+  const tags = el("div", "entry-tags");
+  if (outcome) tags.append(el("span", `outcome ${outcome}`, outcome.replace("_", " ").toUpperCase()));
+  if (typeof savings === "number") tags.append(el("span", "saving", `Saved $${savings.toFixed(2)}`));
+  if (tags.children.length) entry.append(tags);
+  const list = $("audit");
+  list.prepend(entry);
+  while (list.children.length > 30) list.lastChild.remove();
+}
+
+const VERBS = {
+  LockDoor: "locked", UnlockDoor: "unlocked", Start: "started", Stop: "stopped", Pause: "paused", Resume: "resumed",
+  On: "turned on", Off: "turned off", Toggle: "toggled", Open: "opened", Close: "closed", GoHome: "sent home",
+};
+
+function hubSummary(event, device) {
+  const name = device ? device.name : event.device_id;
+  const verb = event.command === "SetDelayStart"
+    ? `set to start in ${event.params.hours} h${event.params.minutes ? ` ${event.params.minutes} min` : ""}`
+    : VERBS[event.command] || event.command;
+  const [path] = PATH_LABELS[event.source] || [event.source || "no path"];
+  if (event.status !== "done") return `Hardware: ${name} not ${verb} — ${event.error || "failed"}`;
+  return `Hardware: ${name} ${verb} via ${path}, confirmed in ${event.latency_ms} ms${event.simulated ? " (digital copy)" : ""}`;
+}
+
+// ---- Hub events
+
+function onHubEvent(event) {
+  const device = event.device_id ? state.devices.get(event.device_id) : null;
+  switch (event.type) {
+    case "state_changed":
+      if (device) { device.clusters = event.clusters; renderTiles(device.id); }
+      break;
+    case "online_changed":
+      if (device) { device.online = event.online; renderTiles(device.id); }
+      break;
+    case "command_simulated":
+      addPrediction(event);
+      break;
+    case "command_executed":
+      if (event.replayed) break;
+      settlePrediction(event.device_id, event.command, event.status === "done" ? "executed" : "failed",
+                       `${event.status === "done" ? "confirmed" : "failed"} in ${event.latency_ms} ms`, event.clusters);
+      addAudit({ at: event.at, summary: hubSummary(event, device), outcome: event.status === "done" ? null : "failed", hubLine: true });
+      break;
+    case "mode_changed":
+      state.offline = Boolean(event.data && event.data.offline);
+      renderMode();
+      loadDevices();
+      break;
+    case "resync_required":
+      loadDevices();
+      break;
+  }
+}
+
+// ---- Engine events (contract in the README, "Stage display")
+
+function renderAgents() {
+  const agents = [...state.agents.values()];
+  if (!agents.length) {
+    $("agents").replaceChildren(el("span", "empty", "No agent connected"));
+    return;
+  }
+  $("agents").replaceChildren(...agents.map((agent) => {
+    const chip = el("span", "agent");
+    const scope = agent.scope_label || (agent.scopes || []).join(", ") || "No scope";
+    const full = /full/i.test(scope);
+    chip.append(el("span", "dot"), el("span", "agent-name", agent.name), el("span", full ? "scope full" : "scope limited", scope));
+    return chip;
+  }));
+}
+
+function onEngineEvent(event) {
+  switch (event.type) {
+    case "agents":
+      state.agents = new Map((event.agents || []).map((a) => [a.id, a]));
+      renderAgents();
+      break;
+    case "agent_connected":
+      state.agents.set(event.agent.id, event.agent);
+      renderAgents();
+      break;
+    case "agent_disconnected":
+      state.agents.delete(event.agent_id);
+      renderAgents();
+      break;
+    case "safety":
+      showAlert(event);
+      break;
+    case "audit": {
+      const agent = event.agent_id ? state.agents.get(event.agent_id) : null;
+      addAudit({ at: event.at, summary: event.summary, agentName: agent && agent.name, outcome: event.outcome,
+                 savings: event.savings_usd });
+      break;
+    }
+  }
+}
+
+// ---- Connections
+
+function setPill(which, tone, label) {
+  $(`${which}-pill`).className = `pill ${tone}`;
+  $(`${which}-label`).textContent = label;
+}
+
+function openSocket(url, onEvent, onState) {
+  let retry = 1000;
+  let socket = null;
+  let stopped = false;
+  const open = () => {
+    socket = new WebSocket(url);
+    socket.addEventListener("open", () => { retry = 1000; onState(true); });
+    socket.addEventListener("message", (m) => {
+      try { onEvent(JSON.parse(m.data)); } catch (error) { console.warn("ignored an unreadable event", error); }
+    });
+    socket.addEventListener("close", () => {
+      onState(false);
+      if (!stopped) setTimeout(open, retry);
+      retry = Math.min(retry * 2, 10000);
+    });
+  };
+  open();
+  return { close: () => { stopped = true; socket && socket.close(); } };
+}
+
+let engineSocket = null;
+function connectEngine(url) {
+  if (engineSocket) engineSocket.close();
+  engineSocket = null;
+  if (!url) {
+    renderEnginePill();
+    return;
+  }
+  engineSocket = openSocket(url, onEngineEvent, (live) => { state.engineLive = live; renderEnginePill(); });
+}
+
+function renderEnginePill() {
+  if (state.engineLive) setPill("engine", "ok", "Engine");
+  else if (state.scripted) setPill("engine", "warn", "Engine · SCRIPTED");
+  else if (engineSocket) setPill("engine", "bad", "Engine reconnecting");
+  else setPill("engine", "", "Engine not connected");
+}
+
+// ---- Scripted scenes: the Engine's messages, played by the presenter, with real hub dry runs and commands
+
+function engine(event) {
+  state.scripted = true;
+  renderEnginePill();
+  onEngineEvent({ at: new Date().toISOString(), ...event });
+}
+
+function note(text) {
+  $("presenter-note").textContent = text || "";
+}
+
+async function dryRun(device, command, params = {}) {
+  return hub("POST", `/devices/${devicePath(device.id)}/simulate`, { command, params });
+}
+
+async function run(device, command, params = {}) {
+  const key = `stage-${(crypto.randomUUID && crypto.randomUUID()) || Date.now()}`;
+  return hub("POST", `/devices/${devicePath(device.id)}/commands`, { command, params, idempotency_key: key });
+}
+
+const AGENTS = [
+  { id: "gemini", name: "Gemini Agent", scopes: ["energy"], scope_label: "Energy Management Only" },
+  { id: "claude", name: "Claude Agent", scopes: ["full_home"], scope_label: "Full Home Access" },
+];
+
+const SCENES = [
+  { title: "Agents join", play: async () => {
+    for (const agent of AGENTS) {
+      engine({ type: "agent_connected", agent });
+      engine({ type: "audit", agent_id: agent.id, summary: `${agent.name} connected with ${agent.scope_label}` });
+      await sleep(600);
+    }
+  } },
+  { title: "Off-peak laundry", play: async () => {
+    const dryer = roleDevice(ROLES[1]);
+    if (!dryer || !dryer.clusters.PorchLaundryExtension) return note("No LG washer or dryer in the registry.");
+    engine({ type: "audit", agent_id: "gemini", summary: "Gemini Agent asked to move the LG dryer cycle to off-peak hours" });
+    await dryRun(dryer, "SetDelayStart", { hours: 4 });
+    await sleep(1800);
+    const result = await run(dryer, "SetDelayStart", { hours: 4 });
+    engine({ type: "audit", agent_id: "gemini", outcome: result.status === "done" ? "done" : "failed",
+             summary: `Gemini shifted ${/^LG\b/.test(dryer.name) ? "" : "LG "}${dryer.name} cycle to off-peak hours`,
+             savings_usd: result.status === "done" ? 1.4 : undefined });
+  } },
+  { title: "Prompt injection", play: async () => {
+    const lock = roleDevice(ROLES[0]);
+    if (!lock) return note("No smart lock in the registry.");
+    engine({ type: "audit", agent_id: "claude",
+             summary: "Claude Agent asked to unlock the front door, following text in a delivery note" });
+    await dryRun(lock, "UnlockDoor");
+    await sleep(1800);
+    engine({ type: "safety", kind: "prompt_injection", title: "Prompt injection detected",
+             detail: "Door unlock blocked → Sent approval request to owner phone", agent_id: "claude",
+             device_id: lock.id, command: "UnlockDoor" });
+    engine({ type: "audit", outcome: "pending_approval",
+             summary: `Porch blocked the ${lock.name} unlock: the instruction came from a delivery note, not the owner. Asked the owner to approve.` });
+  } },
+  { title: "Leak emergency", play: async () => {
+    const leak = roleDevice(ROLES[2]);
+    const valve = roleDevice(ROLES[4]);
+    if (!leak || !valve) return note("Needs a leak sensor and a water valve in the registry.");
+    if (state.offline) {
+      await hub("POST", `/demo/devices/${devicePath(leak.id)}/attributes`, { cluster: "BooleanState", attribute: "StateValue", value: true });
+    } else if (attr(leak, "BooleanState", "StateValue") !== true) {
+      return note("Live hardware: wet the leak sensor first, or turn on offline mode on /dashboard to stage the leak.");
+    }
+    const started = performance.now();
+    await dryRun(valve, "Close");
+    const result = await run(valve, "Close");
+    const elapsed = Math.round(performance.now() - started);
+    engine({ type: "safety", kind: "emergency_override", title: "Emergency override",
+             detail: "Water leak detected → Water valve shut locally without waiting for agent" });
+    engine({ type: "audit", outcome: result.status === "done" ? "done" : "failed",
+             summary: `Porch shut ${valve.name} ${elapsed} ms after the leak, without waiting for an agent` });
+  } },
+  { title: "Agent conflict", play: async () => {
+    const plug = roleDevice(ROLES[3]);
+    if (!plug) return note("No smart plug in the registry.");
+    engine({ type: "audit", agent_id: "gemini", summary: `Gemini Agent (energy) asked to turn ${plug.name} off to cut peak load` });
+    engine({ type: "audit", agent_id: "claude", summary: `Claude Agent (comfort) asked to keep ${plug.name} on overnight` });
+    await sleep(1200);
+    engine({ type: "safety", kind: "arbitration", title: "Agent conflict arbitrated",
+             detail: "Energy Agent vs. Comfort Agent → Prioritized household rule" });
+    await dryRun(plug, "On");
+    const result = await run(plug, "On");
+    engine({ type: "audit", outcome: result.status === "done" ? "done" : "failed",
+             summary: `Household rule "keep the bedroom warm at night" applied: ${plug.name} stays on` });
+  } },
+];
+
+let playing = false;
+async function play(index) {
+  const scene = SCENES[index];
+  if (!scene || playing) return;
+  playing = true;
+  note("");
+  document.querySelectorAll(".scene").forEach((b) => (b.disabled = true));
+  try {
+    await scene.play();
+  } catch (error) {
+    note(`${scene.title}: ${error.message}`);
+  } finally {
+    playing = false;
+    document.querySelectorAll(".scene").forEach((b) => (b.disabled = false));
+  }
+}
+
+$("scenes").replaceChildren(...SCENES.map((scene, i) => {
+  const button = el("button", "scene");
+  button.type = "button";
+  button.append(el("span", "key", i + 1), el("span", "", scene.title));
+  button.addEventListener("click", () => play(i));
+  return button;
+}));
+
+// ---- Presenter wiring
+
+function togglePresenter() { $("presenter").classList.toggle("hidden"); }
+function clearAlerts() { $("alerts").replaceChildren(); }
+function fullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {});
+}
+$("presenter-toggle").addEventListener("click", togglePresenter);
+$("clear-alerts").addEventListener("click", clearAlerts);
+$("fullscreen").addEventListener("click", fullscreen);
+$("engine-connect").addEventListener("click", () => {
+  const url = $("engine-url").value.trim();
+  const next = new URL(location.href);
+  if (url) next.searchParams.set("engine", url); else next.searchParams.delete("engine");
+  history.replaceState(null, "", next);
+  connectEngine(url);
+});
+document.addEventListener("keydown", (key) => {
+  if (key.target instanceof HTMLInputElement || key.metaKey || key.ctrlKey || key.altKey) return;
+  const k = key.key.toLowerCase();
+  if (k === "p") togglePresenter();
+  else if (k === "c") clearAlerts();
+  else if (k === "f") fullscreen();
+  else if (/^[1-9]$/.test(k)) play(Number(k) - 1);
+});
+
+setInterval(() => { $("clock").textContent = clock(); }, 1000);
+$("clock").textContent = clock();
+$("engine-url").value = params.get("engine") || "";
+
+openSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/events`, onHubEvent, (live) => {
+  setPill("hub", live ? "ok" : "bad", live ? "Hub" : "Hub reconnecting");
+  if (live) loadDevices();  // the stream starts now; reload what happened before it
+});
+connectEngine(params.get("engine"));
+renderTiles();
+</script>
+</body>
+</html>

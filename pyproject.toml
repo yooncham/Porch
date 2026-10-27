@@ -1,0 +1,31 @@
+[project]
+name = "porch-hub"
+version = "0.1.0"
+description = "Porch Device Hub: the execution bridge between the Porch Engine and home device platforms (Interface v0)"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "pydantic>=2.7",
+    "uvicorn[standard]>=0.30",
+    "websockets>=13",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27"]
+# LG's official SDK: ThinQ Connect REST plus MQTT push over AWS IoT Core.
+lg = ["thinqconnect>=1.0.14"]
+# engine_lite: the HW6 stand-in for the Porch Engine (an MCP server in front of the hub).
+engine = ["mcp>=2.3", "httpx>=0.27"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["porch_hub*", "engine_lite*"]
+
+[tool.setuptools.package-data]
+porch_hub = ["dashboard/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
