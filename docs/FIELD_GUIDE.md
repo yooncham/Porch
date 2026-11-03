@@ -44,7 +44,7 @@ flowchart LR
   M --> D1["Lock · valve · leak sensor · lamp"]
   L --> D2["Dryer · vacuum · purifier"]
   G --> D3["Space heater plug"]
-  H -. "WebSocket events" .-> S["Pages<br/>/dashboard /digital-twin /stage"]
+  H -. "WebSocket events" .-> S["Pages<br/>/dashboard /digital-twin /home-3d /stage"]
   E -. "/ws/stage" .-> S
 ```
 
@@ -64,6 +64,7 @@ flowchart LR
 | Event bus | `porch_hub/events.py` | Pushes every state change, command and mode switch to the pages over `/ws/events`. |
 | Dashboard | `/dashboard` | The operator view: every device, live state, a latency log, test buttons, and the offline switch. |
 | Digital twin | `/digital-twin` | A floor plan of the home. Shows the physical devices and the digital copy side by side, with scripted scenarios. |
+| 3D home twin | `/home-3d` | The home and its devices in 3D. Each device's model shows its live state; click one to see its attributes and send commands. |
 | Stage display | `/stage` | For the projector. Agents, safety banners and the audit trail in plain language. Keys 1–5 play scripted scenes; P opens the presenter panel. |
 | engine_lite | `engine_lite/` | The HW6 stand-in for Erik's Engine. Three MCP tools for the agent, an energy-only scope, owner approval for unlocking, a colored audit trail in its terminal, and a scripted walkthrough. |
 
@@ -129,6 +130,7 @@ You should see `Uvicorn running on http://127.0.0.1:8000`. Leave it running. Ope
 
 - http://localhost:8000/dashboard: all eight devices, green dots.
 - http://localhost:8000/digital-twin: the floor plan.
+- http://localhost:8000/home-3d: the home in 3D. Drag to orbit, click a device.
 - http://localhost:8000/docs: try `GET /devices` by hand.
 
 ### 3. Start engine_lite (Terminal B)

@@ -10,7 +10,7 @@ from importlib import resources
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel
 from starlette.websockets import WebSocketDisconnect
 
@@ -120,6 +120,25 @@ async def digital_twin() -> HTMLResponse:
     """The 2D digital twin: floor plan, physical vs digital-copy layers, Engine pulses, stage scenarios."""
     page = resources.files("porch_hub").joinpath("dashboard/digital-twin.html").read_text(encoding="utf-8")
     return HTMLResponse(page, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/home-3d", response_class=HTMLResponse, include_in_schema=False)
+async def home_3d() -> HTMLResponse:
+    """The 3D digital twin: the home and its devices in Three.js, live from /ws/events."""
+    page = resources.files("porch_hub").joinpath("dashboard/home-3d.html").read_text(encoding="utf-8")
+    return HTMLResponse(page, headers={"Cache-Control": "no-store"})
+
+
+# Three.js, served by the hub so the 3D page needs no internet. Only these files, by name.
+VENDOR_THREE = {"three.module.min.js", "OrbitControls.js"}
+
+
+@router.get("/vendor/three/{name}", include_in_schema=False)
+async def vendor_three(name: str) -> Response:
+    if name not in VENDOR_THREE:
+        raise HTTPException(404, "not found")
+    script = resources.files("porch_hub").joinpath(f"dashboard/vendor/three/{name}").read_bytes()
+    return Response(script, media_type="text/javascript", headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.get("/stage", response_class=HTMLResponse, include_in_schema=False)

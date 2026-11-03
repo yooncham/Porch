@@ -1,0 +1,958 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Porch Home 3D</title>
+<link rel="icon" href="data:,">
+<!--
+  The 3D digital twin. Same model as Clawblox's renderers: the hub owns the state and streams it
+  over /ws/events; this page only turns the latest state into a Three.js scene. Three.js is served
+  by the hub itself (/vendor/three/), so the page works with no internet.
+-->
+<style>
+:root {
+  --bg: #0b1220; --panel: rgba(15, 23, 42, .92); --line: #1e293b; --ink: #e2e8f0; --muted: #94a3b8;
+  --ok: #34d399; --warn: #fbbf24; --bad: #fb7185; --info: #38bdf8; --accent: #5eead4;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Apple SD Gothic Neo", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 var(--sans); overflow: hidden; }
+#scene { position: fixed; inset: 0; }
+#scene canvas { display: block; outline: none; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+header { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; pointer-events: none; z-index: 3; }
+header > * { pointer-events: auto; }
+.brand { font-weight: 700; letter-spacing: .14em; font-size: 13px; }
+.brand span { color: var(--muted); font-weight: 500; letter-spacing: .04em; margin-left: 6px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); }
+.dot.on { background: var(--ok); }
+.pill.offline { color: var(--warn); border-color: rgba(251, 191, 36, .35); }
+.pill.live { color: var(--ok); border-color: rgba(52, 211, 153, .35); }
+.hint { color: var(--muted); font-size: 12px; margin-left: auto; }
+.views { display: flex; gap: 6px; }
+.views button { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 3px 10px; font-size: 12px; }
+.views button:hover { border-color: #334155; }
+
+#panel { position: fixed; top: 56px; right: 12px; width: 300px; max-height: calc(100% - 68px); overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; z-index: 3; backdrop-filter: blur(8px); }
+#panel h2 { margin: 0; font-size: 16px; }
+#panel .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+#panel dl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; margin: 12px 0; font-size: 13px; }
+#panel dt { color: var(--muted); overflow-wrap: anywhere; }
+#panel dt.group { grid-column: 1 / -1; margin-top: 6px; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: #64748b; }
+#panel dd { margin: 0; font-family: var(--mono); font-size: 12px; text-align: right; max-width: 150px; overflow-wrap: anywhere; }
+.cmds { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cmds button { border: 1px solid #334155; background: #1e293b; border-radius: 6px; padding: 5px 10px; font-size: 13px; }
+.cmds button:hover:not(:disabled) { background: #334155; }
+.cmds button:disabled { opacity: .5; cursor: not-allowed; }
+.cmds input { width: 56px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; color: var(--ink); padding: 4px 6px; font: inherit; }
+.result { margin-top: 10px; font-size: 12px; min-height: 18px; }
+.result.ok { color: var(--ok); } .result.bad { color: var(--bad); } .result.info { color: var(--info); }
+.list { display: grid; gap: 4px; margin-top: 10px; }
+.list button { display: flex; justify-content: space-between; gap: 8px; text-align: left; border: 1px solid var(--line); background: transparent; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+.list button:hover { border-color: #334155; background: #111a2e; }
+.list small { color: var(--muted); font-family: var(--mono); white-space: nowrap; }
+.back { border: 0; background: none; color: var(--muted); padding: 0; font-size: 12px; margin-bottom: 8px; }
+
+#feed { position: fixed; left: 12px; bottom: 12px; width: min(440px, calc(100% - 24px)); display: grid; gap: 4px; z-index: 3; pointer-events: none; }
+#feed div { background: var(--panel); border: 1px solid var(--line); border-left-width: 3px; border-radius: 6px; padding: 5px 9px; font-size: 12px; }
+#feed .ok { border-left-color: var(--ok); } #feed .bad { border-left-color: var(--bad); } #feed .info { border-left-color: var(--info); } #feed .warn { border-left-color: var(--warn); }
+#feed time { color: var(--muted); font-family: var(--mono); margin-right: 6px; }
+
+#labels { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
+.tag { position: absolute; transform: translate(-50%, -100%); pointer-events: auto; border: 1px solid rgba(148, 163, 184, .25); background: rgba(11, 18, 32, .82); border-radius: 6px; padding: 3px 7px; font-size: 11px; line-height: 1.3; white-space: nowrap; text-align: center; }
+.tag b { display: block; font-weight: 600; color: var(--ink); }
+.tag i { font-style: normal; font-family: var(--mono); font-size: 10.5px; }
+.tag .ok { color: var(--ok); } .tag .warn { color: var(--warn); } .tag .bad { color: var(--bad); } .tag .info { color: var(--info); } .tag .muted { color: var(--muted); }
+.tag.selected { border-color: var(--accent); }
+.tag .flash { display: block; margin-top: 2px; font-family: var(--mono); font-size: 10px; }
+
+@media (max-width: 720px) {
+  .hint { display: none; }
+  #panel { top: auto; bottom: 12px; left: 12px; right: 12px; width: auto; max-height: 40%; }
+  #feed { display: none; }
+}
+</style>
+<script type="importmap">
+{ "imports": { "three": "/vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<div id="scene" aria-label="3D model of the home with its devices"></div>
+<div id="labels"></div>
+
+<header>
+  <div class="brand">PORCH<span>3D home twin</span></div>
+  <div class="pill"><span id="ws-dot" class="dot"></span><span id="ws-label">Connecting…</span></div>
+  <div id="mode-pill" class="pill live">LIVE HARDWARE</div>
+  <div class="views">
+    <button id="view-overview" type="button">Overview</button>
+    <button id="view-top" type="button">Top</button>
+  </div>
+  <div class="hint">Drag to orbit · scroll to zoom · click a device</div>
+</header>
+
+<aside id="panel" aria-live="polite"></aside>
+<div id="feed" aria-live="polite"></div>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "/vendor/three/OrbitControls.js";
+
+const $ = (id) => document.getElementById(id);
+const devicePath = (id) => id.split("/").map(encodeURIComponent).join("/");
+const newKey = () => `home3d-${(crypto.randomUUID && crypto.randomUUID()) || Date.now() + "-" + Math.random()}`;
+const motion = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+async function hub(method, path, body) {
+  const response = await fetch(path, {
+    method, headers: body ? { "content-type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data));
+  return data;
+}
+
+function attr(device, cluster, name) {
+  const c = device && device.clusters && device.clusters[cluster];
+  return c ? c.attributes[name] : undefined;
+}
+
+// ---- Scene
+
+const container = $("scene");
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b1220);
+
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 200);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxPolarAngle = 1.32;
+controls.minDistance = 5;
+controls.maxDistance = 34;
+
+const VIEWS = {
+  overview: { position: [1.5, 14.5, 16.5], target: [0, 0, -0.8] },
+  top: { position: [0, 22, 0.01], target: [0, 0, 0] },
+};
+// Back the overview (and top) camera off far enough that the 15 m x 11 m house fits the part of the
+// screen the panel leaves free. fullHeight is the height the camera's field of view spans.
+function fitViews(visibleWidth, visibleHeight, fullHeight) {
+  const tan = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const tanH = tan * (visibleWidth / fullHeight), tanV = tan * (visibleHeight / fullHeight);
+  const distance = Math.max(8.6 / tanH, 7 / tanV) * 1.05;
+  const dir = new THREE.Vector3(1.5, 14.5, 15.9).normalize();
+  VIEWS.overview.position = dir.multiplyScalar(distance).add(new THREE.Vector3(...VIEWS.overview.target)).toArray();
+  VIEWS.top.position = [0, Math.max(8.6 / tanH, 6 / tanV) * 1.05, 0.01];
+  controls.maxDistance = Math.max(34, distance * 1.3);
+}
+let cameraGoal = null;   // {position, target}: eased toward each frame
+let framed = "overview"; // the preset view the camera is on, until the viewer moves it
+function setView(name) {
+  const v = VIEWS[name];
+  framed = name;
+  cameraGoal = { position: new THREE.Vector3(...v.position), target: new THREE.Vector3(...v.target) };
+}
+controls.addEventListener("start", () => { framed = null; cameraGoal = null; });
+camera.position.set(...VIEWS.overview.position);
+controls.target.set(...VIEWS.overview.target);
+$("view-overview").addEventListener("click", () => setView("overview"));
+$("view-top").addEventListener("click", () => setView("top"));
+
+scene.add(new THREE.HemisphereLight(0xdbe7ff, 0x1a2030, 1.4));
+const sun = new THREE.DirectionalLight(0xfff4e0, 2.2);
+sun.position.set(7, 14, 9);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -11, right: 11, top: 11, bottom: -11, near: 1, far: 40 });
+sun.shadow.bias = -0.0005;
+scene.add(sun);
+
+const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, metalness: 0.05, ...extra });
+function box(w, h, d, material, x, y, z, parent = scene) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  parent.add(mesh);
+  return mesh;
+}
+function cylinder(r, h, material, x, y, z, parent = scene, segments = 28) {
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, segments), material);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  parent.add(mesh);
+  return mesh;
+}
+
+// ---- The house: seven rooms on a 14 m x 10 m plan, cut away at 1.1 m so you can see in
+
+const ROOMS = {
+  "Bedroom":     { x: [-7, -2.5], z: [-5, 0], floor: 0x323846 },
+  "Office":      { x: [-2.5, 1.5], z: [-5, 0], floor: 0x3a342d },
+  "Kitchen":     { x: [1.5, 7],   z: [-5, 0], floor: 0x2f3c3c },
+  "Entry":       { x: [-7, -4],   z: [0, 5],  floor: 0x2c313a },
+  "Living room": { x: [-4, 2.5],  z: [0, 5],  floor: 0x3d3429 },
+  "Laundry":     { x: [2.5, 5],   z: [0, 5],  floor: 0x2b3742 },
+  "Utility":     { x: [5, 7],     z: [0, 5],  floor: 0x2c3036 },
+};
+const ROOM_ALIASES = { entryway: "Entry", "living": "Living room", utility: "Utility", "laundry room": "Laundry" };
+function roomFor(name) {
+  if (!name) return null;
+  if (ROOMS[name]) return name;
+  const key = name.toLowerCase();
+  return Object.keys(ROOMS).find((r) => r.toLowerCase() === key) || ROOM_ALIASES[key] || null;
+}
+
+function floorLabel(text, x, z) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512; canvas.height = 96;
+  const g = canvas.getContext("2d");
+  g.fillStyle = "rgba(226, 232, 240, 0.55)";
+  g.font = "600 44px ui-sans-serif, system-ui, sans-serif";
+  g.fillText(text.toUpperCase(), 8, 64);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.49),
+                               new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false }));
+  plane.rotation.x = -Math.PI / 2;
+  plane.position.set(x + 1.35, 0.012, z + 0.4);
+  scene.add(plane);
+}
+
+box(15, 0.2, 11, mat(0x141c2b), 0, -0.1, 0).castShadow = false;
+for (const [name, room] of Object.entries(ROOMS)) {
+  const w = room.x[1] - room.x[0], d = room.z[1] - room.z[0];
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat(room.floor, { roughness: 0.95 }));
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(room.x[0] + w / 2, 0.005, room.z[0] + d / 2);
+  floor.receiveShadow = true;
+  scene.add(floor);
+  floorLabel(name, room.x[0] + 0.15, room.z[0] + 0.05);
+}
+
+const WALL_H = 1.1, WALL_T = 0.12;
+const wallMat = mat(0xc9d1dc, { roughness: 0.9 });
+const capMat = mat(0xeef2f7);
+// One axis-aligned wall from a to b along x (fixed z) or along z (fixed x), with doorway gaps.
+function wall(axis, fixed, from, to, gaps = []) {
+  const cuts = [[from, from], ...gaps, [to, to]].sort((p, q) => p[0] - q[0]);
+  for (let i = 0; i < cuts.length - 1; i++) {
+    const a = cuts[i][1], b = cuts[i + 1][0];
+    if (b - a < 0.05) continue;
+    const len = b - a, mid = (a + b) / 2;
+    const [w, d, x, z] = axis === "x" ? [len, WALL_T, mid, fixed] : [WALL_T, len, fixed, mid];
+    box(w, WALL_H, d, wallMat, x, WALL_H / 2, z);
+    box(w + 0.001, 0.02, d + 0.001, capMat, x, WALL_H + 0.01, z).castShadow = false;
+  }
+}
+wall("x", -5, -7.06, 7.06);
+wall("x", 5, -7.06, 7.06, [[-6, -5]]);                         // front door opening
+wall("z", -7, -5, 5);
+wall("z", 7, -5, 5);
+wall("x", 0, -7, 7, [[-5.4, -4.6], [-1.2, -0.2], [3.1, 3.9]]);
+wall("z", -2.5, -5, 0);
+wall("z", 1.5, -5, 0, [[-1.4, -0.6]]);
+wall("z", -4, 0, 5, [[1.6, 2.6]]);
+wall("z", 2.5, 0, 5, [[3.4, 4.4]]);
+wall("z", 5, 0, 5, [[1.0, 1.8]]);
+
+// Furniture, so the plan reads as a home
+const wood = mat(0x7a5c43), fabric = mat(0x4b5b7a), soft = mat(0x9aa3b2), dark = mat(0x1f2937), white = mat(0xe5e7eb);
+box(2.0, 0.35, 2.4, mat(0x6b5a4a), -5.0, 0.18, -3.7);                     // bed
+box(1.95, 0.12, 1.7, mat(0x3f5f8a), -5.0, 0.41, -3.35);
+box(0.7, 0.12, 0.35, soft, -5.45, 0.42, -4.6); box(0.7, 0.12, 0.35, soft, -4.55, 0.42, -4.6);
+box(0.45, 0.45, 0.4, wood, -6.4, 0.23, -4.6);                               // nightstand
+box(1.7, 0.06, 0.7, wood, -0.5, 0.74, -4.45);                               // desk
+for (const [dx, dz] of [[-0.78, -0.3], [0.78, -0.3], [-0.78, 0.3], [0.78, 0.3]]) box(0.05, 0.72, 0.05, dark, -0.5 + dx, 0.36, -4.45 + dz);
+box(0.5, 0.06, 0.5, dark, -0.5, 0.45, -3.75); box(0.5, 0.5, 0.06, dark, -0.5, 0.72, -3.52);   // chair
+box(0.9, 0.5, 0.5, dark, -0.5, 0.25, -0.35);                                // bookshelf by the door
+box(4.6, 0.9, 0.6, mat(0xd6d3cc), 3.9, 0.45, -4.7);                         // kitchen counter
+box(0.7, 0.04, 0.45, mat(0x64748b, { metalness: 0.6, roughness: 0.3 }), 4.5, 0.91, -4.7);   // sink
+box(0.8, 1.6, 0.7, white, 6.55, 0.8, -4.6);                                 // fridge
+box(1.4, 0.75, 0.8, mat(0x8b7355), 4.0, 0.38, -2.4);                        // island
+box(2.2, 0.42, 0.85, fabric, -1.0, 0.21, 4.45); box(2.2, 0.5, 0.2, fabric, -1.0, 0.55, 4.82);   // sofa
+box(1.0, 0.32, 0.5, wood, -1.0, 0.16, 3.2);                                 // coffee table
+const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 2.0), mat(0x5b4636, { roughness: 1 }));
+rug.rotation.x = -Math.PI / 2; rug.position.set(-1.0, 0.01, 3.4); rug.receiveShadow = true; scene.add(rug);
+box(1.6, 0.45, 0.4, dark, -1.0, 0.23, 0.3); box(1.3, 0.75, 0.05, mat(0x0f172a, { roughness: 0.3 }), -1.0, 0.85, 0.25);  // TV
+box(0.9, 0.4, 0.35, wood, -6.4, 0.2, 2.6);                                  // shoe bench
+box(0.9, 0.01, 0.6, mat(0x334155), -5.5, 0.012, 4.5).castShadow = false;   // doormat
+cylinder(0.32, 1.2, white, 6.4, 0.6, 4.4);                                  // water heater
+cylinder(0.25, 0.45, mat(0x8a9bb3), 3.1, 0.23, 4.4);                        // laundry basket
+
+// ---- Devices. Each builder returns { group, update(device, now, dt), label() } placed in its room.
+
+const TONE = { ok: 0x34d399, warn: 0xfbbf24, bad: 0xfb7185, info: 0x38bdf8, off: 0x475569 };
+function led(parent, x, y, z, r = 0.035) {
+  const m = new THREE.MeshStandardMaterial({ color: 0x111827, emissive: TONE.off, emissiveIntensity: 1.5 });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), m);
+  mesh.position.set(x, y, z);
+  parent.add(mesh);
+  return (tone) => m.emissive.setHex(TONE[tone] ?? TONE.off);
+}
+function placed(x, z, rotation = 0) {
+  const group = new THREE.Group();
+  group.position.set(x, 0, z);
+  group.rotation.y = rotation;
+  scene.add(group);
+  return group;
+}
+
+const BUILDERS = {
+  lock() {
+    // The front door in its opening, with the lock on the inside face.
+    const group = placed(-6, 5);
+    const door = box(1.0, 1.06, 0.06, mat(0x8b6b4e), 0.5, 0.53, 0, group);
+    const body = box(0.12, 0.2, 0.06, mat(0x334155, { metalness: 0.5, roughness: 0.4 }), 0.82, 0.62, -0.06, group);
+    const bolt = box(0.14, 0.03, 0.03, mat(0xcbd5e1, { metalness: 0.8, roughness: 0.25 }), 0.95, 0.62, -0.06, group);
+    const light = led(group, 0.82, 0.74, -0.095);
+    return {
+      group, labelAt: new THREE.Vector3(-5.5, 1.55, 4.8),
+      update(d) {
+        const locked = attr(d, "DoorLock", "LockState") === "Locked";
+        bolt.position.x = locked ? 0.98 : 0.86;
+        light(locked ? "ok" : "warn");
+        door.material.color.setHex(locked ? 0x8b6b4e : 0x9c7a58);
+      },
+      label(d) { const s = attr(d, "DoorLock", "LockState"); return [s || "?", s === "Locked" ? "ok" : "warn"]; },
+    };
+  },
+
+  leak() {
+    const group = placed(4.5, -4.15);
+    cylinder(0.11, 0.05, white, 0, 0.03, 0, group);
+    const light = led(group, 0, 0.065, 0, 0.025);
+    const puddle = new THREE.Mesh(new THREE.CircleGeometry(0.75, 40),
+      new THREE.MeshStandardMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.55, roughness: 0.1, metalness: 0.2 }));
+    puddle.rotation.x = -Math.PI / 2; puddle.position.y = 0.013; group.add(puddle);
+    const alarm = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.26, 40),
+      new THREE.MeshBasicMaterial({ color: TONE.bad, transparent: true, side: THREE.DoubleSide }));
+    alarm.rotation.x = -Math.PI / 2; alarm.position.y = 0.02; group.add(alarm);
+    let wet = false;
+    return {
+      group, labelAt: new THREE.Vector3(4.5, 1.25, -3.9),
+      update(d, now) {
+        wet = attr(d, "BooleanState", "StateValue") === true;
+        puddle.visible = alarm.visible = wet;
+        light(wet ? "bad" : "ok");
+        if (wet && motion) {
+          const k = (now / 1200) % 1;
+          alarm.scale.setScalar(1 + k * 3.5);
+          alarm.material.opacity = 1 - k;
+        }
+      },
+      label(d) { const w = attr(d, "BooleanState", "StateValue"); return [w ? "Water detected" : w === false ? "Dry" : "?", w ? "bad" : "ok"]; },
+    };
+  },
+
+  valve() {
+    // The main pipe along the utility room's east wall, the valve in the middle.
+    const group = placed(6.78, 2.2);
+    const pipeMat = mat(0x94a3b8, { metalness: 0.7, roughness: 0.35 });
+    const pipe = cylinder(0.06, 3.6, pipeMat, 0, 0.45, 0, group);
+    pipe.rotation.x = Math.PI / 2;
+    const valveBody = box(0.2, 0.2, 0.26, mat(0xb45309, { metalness: 0.5 }), 0, 0.45, 0, group);
+    const stem = cylinder(0.02, 0.18, pipeMat, 0, 0.62, 0, group);
+    const handle = box(0.06, 0.04, 0.42, mat(0xdc2626), 0, 0.72, 0, group);
+    const light = led(group, -0.11, 0.6, 0.12);
+    const flow = [];
+    const flowMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+    for (let i = 0; i < 9; i++) {
+      const drop = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), flowMat);
+      drop.position.set(-0.07, 0.45, -1.8 + i * 0.4);
+      group.add(drop); flow.push(drop);
+    }
+    let open = true;
+    return {
+      group, labelAt: new THREE.Vector3(6.5, 1.5, 2.2),
+      update(d, now) {
+        open = attr(d, "ValveConfigurationAndControl", "CurrentState") === "Open";
+        handle.rotation.y = open ? 0 : Math.PI / 2;
+        light(open ? "ok" : "bad");
+        for (const [i, drop] of flow.entries()) {
+          drop.visible = open;
+          if (open && motion) drop.position.z = -1.8 + ((i * 0.4 + now / 600) % 3.6);
+        }
+      },
+      label(d) { const s = attr(d, "ValveConfigurationAndControl", "CurrentState"); return [s || "?", s === "Open" ? "ok" : "bad"]; },
+    };
+  },
+
+  lamp() {
+    const group = placed(-0.05, -4.6);
+    cylinder(0.09, 0.03, dark, 0, 0.785, 0, group);
+    const arm = cylinder(0.015, 0.45, dark, 0, 1.0, 0, group);
+    arm.rotation.z = 0.25;
+    const shade = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.16, 24, 1, true), mat(0x334155, { side: THREE.DoubleSide }));
+    shade.position.set(-0.07, 1.22, 0.02); group.add(shade);
+    const bulbMat = new THREE.MeshStandardMaterial({ color: 0xfef3c7, emissive: 0xfbbf24, emissiveIntensity: 0 });
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), bulbMat);
+    bulb.position.set(-0.07, 1.17, 0.02); group.add(bulb);
+    const light = new THREE.PointLight(0xffd59a, 0, 4.5, 1.6);
+    light.position.set(-0.07, 1.1, 0.1); group.add(light);
+    return {
+      group, labelAt: new THREE.Vector3(-0.1, 1.75, -4.4),
+      update(d) {
+        const on = attr(d, "OnOff", "OnOff") === true;
+        bulbMat.emissiveIntensity = on ? 3 : 0;
+        light.intensity = on ? 6 : 0;
+      },
+      label(d) { const on = attr(d, "OnOff", "OnOff"); return [on ? "On" : on === false ? "Off" : "?", on ? "warn" : "muted"]; },
+    };
+  },
+
+  dryer(type) {
+    const group = placed(4.3, 0.45);
+    const shell = box(0.72, 0.9, 0.7, type === "LaundryWasher" ? mat(0xdbe4ee) : white, 0, 0.45, 0, group);
+    box(0.72, 0.12, 0.04, mat(0x334155), 0, 0.84, 0.36, group);                // control panel
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.035, 12, 36), mat(0x94a3b8, { metalness: 0.7 }));
+    ring.position.set(0, 0.45, 0.36); group.add(ring);
+    const drum = new THREE.Group();
+    drum.position.set(0, 0.45, 0.33);
+    group.add(drum);
+    const glass = new THREE.Mesh(new THREE.CircleGeometry(0.2, 32), new THREE.MeshStandardMaterial({ color: 0x1e3a5f, roughness: 0.15, metalness: 0.3 }));
+    drum.add(glass);
+    for (let i = 0; i < 3; i++) {
+      const vane = box(0.04, 0.17, 0.02, mat(0xcbd5e1), 0, 0, 0.01, drum);
+      vane.position.set(Math.cos(i * 2.094) * 0.1, Math.sin(i * 2.094) * 0.1, 0.01);
+      vane.rotation.z = i * 2.094;
+    }
+    const light = led(group, 0.27, 0.84, 0.385, 0.025);
+    let state = "Stopped";
+    return {
+      group, labelAt: new THREE.Vector3(4.3, 1.55, 0.6),
+      update(d, now, dt) {
+        state = attr(d, "OperationalState", "OperationalState");
+        const delay = attr(d, "PorchLaundryExtension", "RelativeHourToStart") || 0;
+        if (state === "Running" && motion) drum.rotation.z -= dt * 6;
+        light(state === "Running" ? "ok" : state === "Paused" ? "warn" : delay > 0 ? "info" : "off");
+        shell.position.x = state === "Running" && motion ? Math.sin(now / 45) * 0.004 : 0;
+      },
+      label(d) {
+        const s = attr(d, "OperationalState", "OperationalState");
+        const delay = attr(d, "PorchLaundryExtension", "RelativeHourToStart") || 0;
+        if (s !== "Running" && delay > 0) return [`Starts in ${delay} h`, "info"];
+        return [s || "?", s === "Running" ? "ok" : s === "Paused" ? "warn" : "muted"];
+      },
+    };
+  },
+
+  vacuum() {
+    const dock = placed(-3.5, 0.22);
+    box(0.4, 0.3, 0.14, mat(0x334155), 0, 0.15, 0, dock);
+    const dockLight = led(dock, 0, 0.25, 0.075, 0.02);
+    const robot = new THREE.Group();
+    scene.add(robot);
+    cylinder(0.19, 0.08, mat(0x1f2937, { roughness: 0.4 }), 0, 0.05, 0, robot);
+    cylinder(0.08, 0.03, mat(0x475569), 0, 0.1, -0.05, robot);
+    const light = led(robot, 0, 0.1, 0.12, 0.02);
+    const home = new THREE.Vector3(-3.5, 0, 0.62);
+    robot.position.copy(home);
+    let t = 0;
+    const path = (u) => new THREE.Vector3(-0.8 + 2.1 * Math.cos(u) + 0.25 * Math.sin(3 * u), 0, 1.95 + 0.85 * Math.sin(u));
+    return {
+      group: robot, extra: [dock], labelAt: null,
+      update(d, now, dt) {
+        const s = attr(d, "RvcOperationalState", "OperationalState");
+        let goal = home;
+        if (s === "Running") { if (motion) t += dt * 0.35; goal = path(t); }
+        else if (s === "Paused") goal = robot.position;
+        const step = goal.clone().sub(robot.position);
+        const max = dt * 0.9;
+        if (step.length() > 0.002) {
+          robot.rotation.y = Math.atan2(step.x, step.z);
+          robot.position.add(step.length() > max ? step.setLength(max) : step);
+        }
+        light(s === "Running" ? "ok" : s === "Paused" ? "warn" : "info");
+        dockLight(robot.position.distanceTo(home) < 0.05 ? "ok" : "off");
+        this.labelAt = robot.position.clone().setY(0.85);
+      },
+      label(d) {
+        const s = attr(d, "RvcOperationalState", "OperationalState");
+        const pct = attr(d, "PowerSource", "BatPercentRemaining");
+        const battery = typeof pct === "number" ? ` · ${Math.round(pct / 2)}%` : "";
+        return [`${s || "?"}${battery}`, s === "Running" ? "ok" : s === "Paused" ? "warn" : "muted"];
+      },
+    };
+  },
+
+  purifier() {
+    const group = placed(-6.4, -0.55);
+    cylinder(0.2, 0.75, white, 0, 0.38, 0, group);
+    const top = cylinder(0.17, 0.04, mat(0x111827), 0, 0.77, 0, group);
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0x111827, emissive: TONE.off, emissiveIntensity: 2 });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.015, 8, 40), ringMat);
+    ring.rotation.x = Math.PI / 2; ring.position.y = 0.76; group.add(ring);
+    const fan = new THREE.Group(); fan.position.y = 0.8; group.add(fan);
+    for (let i = 0; i < 4; i++) { const blade = box(0.26, 0.01, 0.05, mat(0x64748b), 0, 0, 0, fan); blade.rotation.y = i * Math.PI / 4; }
+    const QUALITY = { Good: "ok", Fair: "ok", Moderate: "warn", Poor: "bad", VeryPoor: "bad", ExtremelyPoor: "bad" };
+    return {
+      group, labelAt: new THREE.Vector3(-6.4, 1.5, -0.55),
+      update(d, now, dt) {
+        const on = attr(d, "OnOff", "OnOff") === true;
+        if (on && motion) fan.rotation.y += dt * 9;
+        ringMat.emissive.setHex(on ? TONE[QUALITY[attr(d, "AirQuality", "AirQuality")] || "info"] : TONE.off);
+      },
+      label(d) {
+        const on = attr(d, "OnOff", "OnOff");
+        const pm = attr(d, "Pm25ConcentrationMeasurement", "MeasuredValue");
+        return [`${on ? "On" : on === false ? "Off" : "?"}${pm !== undefined ? ` · PM2.5 ${pm}` : ""}`, on ? "ok" : "muted"];
+      },
+    };
+  },
+
+  heater() {
+    const group = placed(1.9, 0.72);
+    box(0.5, 0.55, 0.24, mat(0xe2e8f0), 0, 0.3, 0, group);
+    const grilleMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, emissive: 0xf97316, emissiveIntensity: 0 });
+    for (let i = 0; i < 5; i++) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.035, 0.02), grilleMat);
+      bar.position.set(0, 0.16 + i * 0.08, 0.125); group.add(bar);
+    }
+    box(0.08, 0.05, 0.1, mat(0x334155), 0.28, 0.05, 0, group);                 // the smart plug
+    const plugLight = led(group, 0.28, 0.08, 0.055, 0.015);
+    const glow = new THREE.PointLight(0xff7a2f, 0, 3.5, 1.8);
+    glow.position.set(0, 0.35, 0.5); group.add(glow);
+    return {
+      group, labelAt: new THREE.Vector3(1.9, 1.35, 0.8),
+      update(d, now) {
+        const on = attr(d, "OnOff", "OnOff") === true;
+        const flicker = on && motion ? 0.15 * Math.sin(now / 160) : 0;
+        grilleMat.emissiveIntensity = on ? 2.2 + flicker : 0;
+        glow.intensity = on ? 5 + flicker * 6 : 0;
+        plugLight(on ? "ok" : "off");
+      },
+      label(d) { const on = attr(d, "OnOff", "OnOff"); return [on ? "Heating" : on === false ? "Off" : "?", on ? "warn" : "muted"]; },
+    };
+  },
+
+  generic(type, d, spot) {
+    // Anything the scene has no model for yet: a labelled box in its room.
+    const group = placed(spot.x, spot.z);
+    box(0.3, 0.3, 0.3, mat(0x64748b), 0, 0.15, 0, group);
+    const light = led(group, 0, 0.32, 0.12);
+    return {
+      group, labelAt: new THREE.Vector3(spot.x, 1.0, spot.z),
+      update(dev) { light(dev.online ? "ok" : "off"); },
+      label(dev) {
+        const first = Object.values(dev.clusters || {})[0];
+        const value = first ? Object.values(first.attributes)[0] : undefined;
+        return [value === undefined ? dev.device_type : String(value), "muted"];
+      },
+    };
+  },
+};
+
+// Which model a device gets. Two plugs are told apart by what they power, from the device name.
+function modelFor(device) {
+  switch (device.device_type) {
+    case "DoorLock": return "lock";
+    case "WaterLeakSensor": return "leak";
+    case "WaterValve": return "valve";
+    case "LaundryDryer": case "LaundryWasher": return "dryer";
+    case "RoboticVacuumCleaner": return "vacuum";
+    case "AirPurifier": return "purifier";
+    case "OnOffLight": return "lamp";
+    case "OnOffPlug": return /heater/i.test(device.name) ? "heater" : /lamp|light/i.test(device.name) ? "lamp" : "generic";
+    default: return "generic";
+  }
+}
+
+// ---- Devices in the scene
+
+const state = { devices: new Map(), views: new Map(), selected: null, offline: false };
+const pickables = [];
+const labels = $("labels");
+let spareSpots = 0;
+
+function spotIn(roomName) {
+  const room = ROOMS[roomFor(roomName)] || ROOMS["Living room"];
+  const i = spareSpots++;
+  return { x: (room.x[0] + room.x[1]) / 2 + (i % 3 - 1) * 0.6, z: (room.z[0] + room.z[1]) / 2 + 0.6 };
+}
+
+function addView(device) {
+  let model = modelFor(device);
+  // A second device of a type that has one fixed place in the house goes in its own room instead.
+  if (model !== "generic" && [...state.views.values()].some((v) => v.model === model)) model = "generic";
+  const view = BUILDERS[model](device.device_type, device, spotIn(device.room));
+  view.model = model;
+  view.id = device.id;
+  for (const object of [view.group, ...(view.extra || [])]) {
+    object.traverse((o) => { if (o.isMesh) { o.userData.deviceId = device.id; pickables.push(o); } });
+  }
+  const tag = el("button", "tag");
+  tag.type = "button";
+  tag.addEventListener("click", () => select(device.id));
+  view.tag = tag;
+  view.flash = null;   // {text, tone, until}
+  labels.appendChild(tag);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.5, 48), new THREE.MeshBasicMaterial({ color: 0x5eead4, transparent: true, opacity: 0.9 }));
+  ring.rotation.x = -Math.PI / 2;
+  ring.visible = false;
+  scene.add(ring);
+  view.ring = ring;
+  state.views.set(device.id, view);
+  return view;
+}
+
+function renderTag(view, device) {
+  const [text, tone] = view.label(device);
+  const name = el("b", "", device.name);
+  const status = el("i", device.online ? tone : "muted", device.online ? text : "offline");
+  const parts = [name, status];
+  if (view.flash && view.flash.until > performance.now()) parts.push(el("span", `flash ${view.flash.tone}`, view.flash.text));
+  view.tag.replaceChildren(...parts);
+  view.tag.classList.toggle("selected", state.selected === device.id);
+  view.tag.setAttribute("aria-label", `${device.name}: ${device.online ? text : "offline"}`);
+}
+
+function flash(deviceId, text, tone) {
+  const view = state.views.get(deviceId);
+  if (!view) return;
+  view.flash = { text, tone, until: performance.now() + 4500 };
+  pulseAt(view, tone);
+  const device = state.devices.get(deviceId);
+  if (device) renderTag(view, device);
+  setTimeout(() => { const d = state.devices.get(deviceId); if (d) renderTag(view, d); }, 4600);
+}
+
+// An expanding ring on the floor under a device: cyan for a dry run, green for a confirmed command.
+const pulses = [];
+function pulseAt(view, tone) {
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.38, 48),
+    new THREE.MeshBasicMaterial({ color: TONE[tone] ?? TONE.info, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2;
+  const at = groundOf(view);
+  ring.position.set(at.x, 0.03, at.z);
+  scene.add(ring);
+  pulses.push({ ring, born: performance.now() });
+}
+function groundOf(view) {
+  const p = view.labelAt || view.group.position;
+  return new THREE.Vector3(p.x, 0, p.z);
+}
+
+function syncDevices(list) {
+  const seen = new Set();
+  for (const device of list) {
+    seen.add(device.id);
+    state.devices.set(device.id, device);
+    const view = state.views.get(device.id) || addView(device);
+    renderTag(view, device);
+  }
+  for (const [id, view] of state.views) {
+    if (seen.has(id)) continue;
+    for (const object of [view.group, ...(view.extra || []), view.ring]) scene.remove(object);
+    view.tag.remove();
+    state.views.delete(id);
+    state.devices.delete(id);
+  }
+  renderPanel();
+}
+
+// ---- Picking and the side panel
+
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let downAt = null;
+renderer.domElement.addEventListener("pointerdown", (e) => { downAt = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener("pointerup", (e) => {
+  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObjects(pickables, false)[0];
+  select(hit ? hit.object.userData.deviceId : null);
+});
+
+function select(id) {
+  state.selected = id && state.devices.has(id) ? id : null;
+  for (const [vid, view] of state.views) {
+    view.ring.visible = vid === state.selected;
+    const device = state.devices.get(vid);
+    if (device) renderTag(view, device);
+  }
+  if (state.selected) {
+    const view = state.views.get(state.selected);
+    const target = groundOf(view);
+    const offset = camera.position.clone().sub(controls.target).setLength(12);
+    framed = null;
+    cameraGoal = { position: target.clone().add(offset), target };
+  }
+  renderPanel();
+  $("panel").scrollTop = 0;
+}
+
+const PATHS = { matter: "Matter (local)", lg_thinq: "LG ThinQ (cloud)", google_home: "Google Home (cloud)" };
+let busy = false;
+
+function renderPanel() {
+  const panel = $("panel");
+  const device = state.selected && state.devices.get(state.selected);
+  if (!device) {
+    const items = [...state.devices.values()].map((d) => {
+      const view = state.views.get(d.id);
+      const button = el("button", "");
+      button.type = "button";
+      const [text] = view ? view.label(d) : ["", ""];
+      button.append(el("span", "", d.name), el("small", "", d.online ? text : "offline"));
+      button.addEventListener("click", () => select(d.id));
+      return button;
+    });
+    const list = el("div", "list");
+    list.append(...items);
+    panel.replaceChildren(el("h2", "", "Home"), el("div", "sub", `${state.devices.size} devices · click one in the scene or below`), list);
+    return;
+  }
+  const back = el("button", "back", "← All devices");
+  back.type = "button";
+  back.addEventListener("click", () => select(null));
+  const facts = el("dl");
+  const add = (k, v) => facts.append(el("dt", "", k), el("dd", "", v));
+  add("Room", device.room);
+  add("Type", device.device_type);
+  add("Path", PATHS[device.primary_control_path] || device.primary_control_path);
+  if ((device.control_paths || []).length > 1) add("Fallback", device.control_paths.slice(1).join(", "));
+  add("Online", device.online ? "yes" : "no");
+  for (const [cluster, c] of Object.entries(device.clusters || {})) {
+    facts.append(el("dt", "group", cluster));
+    for (const [name, value] of Object.entries(c.attributes)) add(name, JSON.stringify(value));
+  }
+  const cmds = el("div", "cmds");
+  const result = el("div", "result");
+  result.id = "result";
+  const commands = [...new Set(Object.values(device.clusters || {}).flatMap((c) => c.commands))];
+  for (const command of commands) {
+    let params = () => ({});
+    if (command === "SetDelayStart") {
+      const hours = el("input");
+      hours.type = "number"; hours.min = "0"; hours.max = "23"; hours.value = "4"; hours.id = "delay-hours";
+      hours.setAttribute("aria-label", "Delay in hours");
+      params = () => ({ hours: Number(hours.value) });
+      cmds.append(hours);
+    }
+    const button = el("button", "", command);
+    button.type = "button";
+    button.disabled = busy || !device.online;
+    button.addEventListener("click", () => run(device, command, params()));
+    cmds.append(button);
+  }
+  const kids = [back, el("h2", "", device.name), el("div", "sub", device.id), facts];
+  if (commands.length) kids.push(el("div", "sub", "Commands run on the digital copy first, then on the device, then the hub reads it back."), cmds, result);
+  panel.replaceChildren(...kids);
+}
+
+// Re-render the panel without losing the result line of the command that just ran.
+function refreshPanel() {
+  const r = $("result");
+  const keep = r ? [r.textContent, r.className] : null;
+  renderPanel();
+  if (keep && $("result")) [$("result").textContent, $("result").className] = keep;
+}
+
+async function run(device, command, params) {
+  if (busy) return;
+  busy = true;
+  refreshPanel();
+  const say = (text, tone) => { const r = $("result"); if (r) { r.textContent = text; r.className = `result ${tone}`; } };
+  say(`Dry run of ${command}…`, "info");
+  try {
+    const path = `/devices/${devicePath(device.id)}`;
+    const preview = await hub("POST", `${path}/simulate`, { command, params });
+    if (!preview.would_succeed) { say(`Not sent: ${preview.reason || "the dry run says it would fail"}`, "bad"); return; }
+    say(`Sending ${command}…`, "info");
+    const done = await hub("POST", `${path}/commands`, { command, params, idempotency_key: newKey() });
+    say(done.status === "done" ? `Confirmed by read-back in ${done.latency_ms} ms via ${done.control_path}${done.simulated ? " (digital copy)" : ""}`
+                               : `Failed: ${done.error}`, done.status === "done" ? "ok" : "bad");
+  } catch (error) {
+    say(error.message, "bad");
+  } finally {
+    busy = false;
+    refreshPanel();
+  }
+}
+
+// ---- Live data
+
+function feed(text, tone = "info") {
+  const line = el("div", tone);
+  line.append(el("time", "", new Date().toLocaleTimeString([], { hour12: false })), document.createTextNode(text));
+  const box = $("feed");
+  box.append(line);
+  while (box.children.length > 5) box.firstChild.remove();
+}
+
+const VERBS = { LockDoor: "locked", UnlockDoor: "unlocked", Start: "started", Stop: "stopped", Pause: "paused",
+                GoHome: "sent home", On: "turned on", Off: "turned off", Toggle: "toggled", Open: "opened",
+                Close: "closed", SetDelayStart: "delayed" };
+
+function onEvent(event) {
+  const device = event.device_id ? state.devices.get(event.device_id) : null;
+  switch (event.type) {
+    case "state_changed":
+      if (!device) return;
+      device.clusters = event.clusters;
+      break;
+    case "online_changed":
+      if (!device) return;
+      device.online = event.online;
+      feed(`${device.name} is ${event.online ? "back online" : "offline"}`, event.online ? "ok" : "warn");
+      break;
+    case "command_simulated":
+      if (!device) return;
+      flash(device.id, event.would_succeed ? `dry run: ${event.command} ok` : `dry run: ${event.command} would fail`,
+            event.would_succeed ? "info" : "bad");
+      feed(`Dry run on the digital copy: ${event.command} on ${device.name} ${event.would_succeed ? "would succeed" : `would fail (${event.error})`}`,
+           event.would_succeed ? "info" : "bad");
+      return;
+    case "command_executed":
+      if (!device || event.replayed) return;
+      if (event.clusters && Object.keys(event.clusters).length) device.clusters = { ...device.clusters, ...event.clusters };
+      if (event.status === "done") {
+        flash(device.id, `confirmed · ${event.latency_ms} ms`, "ok");
+        feed(`${device.name} ${VERBS[event.command] || event.command} · confirmed by read-back in ${event.latency_ms} ms${event.simulated ? " (digital copy)" : ""}`, "ok");
+      } else {
+        flash(device.id, `${event.command} failed`, "bad");
+        feed(`${event.command} on ${device.name} failed: ${event.error}`, "bad");
+      }
+      break;
+    case "mode_changed":
+      state.offline = Boolean(event.data && event.data.offline);
+      renderMode();
+      feed(`Offline demo mode ${state.offline ? "on: commands run on the digital copy" : "off"}`, "warn");
+      loadDevices();
+      return;
+    case "resync_required":
+      loadDevices();
+      return;
+    default:
+      return;
+  }
+  const view = state.views.get(device.id);
+  if (view) renderTag(view, device);
+  if ((state.selected === device.id && !busy) || !state.selected) refreshPanel();
+}
+
+function renderMode() {
+  const pill = $("mode-pill");
+  pill.className = `pill ${state.offline ? "offline" : "live"}`;
+  pill.textContent = state.offline ? "DIGITAL COPY · OFFLINE" : "LIVE HARDWARE";
+}
+
+async function loadDevices() {
+  try {
+    syncDevices(await hub("GET", "/devices"));
+    state.offline = (await hub("GET", "/demo/offline-mode")).enabled;
+    renderMode();
+  } catch (error) {
+    feed(`Could not load devices: ${error.message}`, "bad");
+  }
+}
+
+function connect() {
+  let retry = 1000;
+  const open = () => {
+    const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/events`);
+    socket.addEventListener("open", () => {
+      retry = 1000;
+      $("ws-label").textContent = "Live";
+      $("ws-dot").className = "dot on";
+      loadDevices();
+    });
+    socket.addEventListener("message", (m) => { try { onEvent(JSON.parse(m.data)); } catch (e) { console.warn(e); } });
+    socket.addEventListener("close", () => {
+      $("ws-label").textContent = "Reconnecting…";
+      $("ws-dot").className = "dot";
+      setTimeout(open, retry);
+      retry = Math.min(retry * 2, 10000);
+    });
+  };
+  open();
+}
+
+// ---- Frame loop
+
+function resize() {
+  const w = container.clientWidth, h = container.clientHeight;
+  renderer.setSize(w, h, false);
+  renderer.domElement.style.width = `${w}px`;
+  renderer.domElement.style.height = `${h}px`;
+  // Centre the house in the space the panel leaves: left of it on wide screens, above it on phones.
+  const wide = w > 720;
+  const side = wide ? $("panel").offsetWidth + 24 : 0;
+  const below = wide ? 0 : $("panel").offsetHeight + 24;
+  camera.aspect = (w + side) / (h + below);
+  camera.setViewOffset(w + side, h + below, side, below, w, h);
+  camera.updateProjectionMatrix();
+  fitViews(w - side, h - below - 60, h + below);
+  if (framed) setView(framed);   // keep a preset view fitted as the window or panel changes size
+}
+addEventListener("resize", resize);
+new ResizeObserver(resize).observe($("panel"));
+
+const projected = new THREE.Vector3();
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 0.1);
+  last = now;
+  if (cameraGoal) {
+    const k = 1 - Math.pow(0.002, dt);
+    camera.position.lerp(cameraGoal.position, k);
+    controls.target.lerp(cameraGoal.target, k);
+    if (camera.position.distanceTo(cameraGoal.position) < 0.02) cameraGoal = null;
+  }
+  controls.update();
+  for (const [id, view] of state.views) {
+    const device = state.devices.get(id);
+    if (!device) continue;
+    view.update(device, now, dt);
+    const ground = groundOf(view);
+    view.ring.position.set(ground.x, 0.02, ground.z);
+    projected.copy(view.labelAt || view.group.position).project(camera);
+    const visible = projected.z < 1 && Math.abs(projected.x) < 1.2 && Math.abs(projected.y) < 1.2;
+    view.tag.hidden = !visible;
+    if (visible) {
+      view.tag.style.left = `${((projected.x + 1) / 2) * container.clientWidth}px`;
+      view.tag.style.top = `${((1 - projected.y) / 2) * container.clientHeight}px`;
+    }
+  }
+  for (let i = pulses.length - 1; i >= 0; i--) {
+    const p = pulses[i];
+    const k = (now - p.born) / 1400;
+    if (k >= 1) { scene.remove(p.ring); p.ring.geometry.dispose(); p.ring.material.dispose(); pulses.splice(i, 1); continue; }
+    p.ring.scale.setScalar(1 + k * 3);
+    p.ring.material.opacity = 1 - k;
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+renderPanel();
+resize();
+camera.position.set(...VIEWS.overview.position);
+requestAnimationFrame(frame);
+connect();
+</script>
+</body>
+</html>

@@ -31,7 +31,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev,engine]"
 .venv/bin/uvicorn porch_hub.main:app --port 8000
 ```
 
-Open http://localhost:8000/dashboard and http://localhost:8000/digital-twin.
+Open http://localhost:8000/dashboard and http://localhost:8000/home-3d (the home in 3D).
 
 **Terminal 2, engine_lite** (a stand-in for the Porch Engine; this terminal is the audit trail):
 
@@ -94,6 +94,7 @@ http://localhost:8000/docs.
 | `GET /dashboard` | The live dashboard (also at `/`) |
 | `GET /stage` | The projector display for live demos |
 | `GET /digital-twin` | The 2D floor plan: physical hardware beside its digital copy |
+| `GET /home-3d` | The home and its devices in 3D (Three.js), live from the event stream |
 | `GET`, `PUT /demo/offline-mode` | `{"enabled": true}` turns the offline backup on without restarting |
 | `POST /demo/devices/{id}/attributes` | Offline mode only: set a reading in the digital copy, for example a leak |
 
@@ -317,6 +318,28 @@ Each scene sends the messages the Engine would send, and runs real hub dry runs 
 While they're in use the Engine pill reads **SCRIPTED**, so the source is never hidden. The leak
 scene sets the sensor wet only in offline mode. On live hardware the sensor must actually be
 wet.
+
+## 3D home twin
+
+http://localhost:8000/home-3d shows the demo home in 3D: seven rooms cut away at wall height,
+furniture, and a model for each device that shows its live state. The door lock's bolt moves,
+the leak sensor shows a puddle and an alarm ring, the valve handle turns and the water in the
+pipe stops, the lamp and the heater glow, the dryer drum spins, the robot vacuum leaves its dock
+and cleans the living room, and the purifier's fan turns.
+
+- **Live.** It follows `/ws/events` like the other pages. A dry run (`command_simulated`) shows a
+  blue ring and "dry run" on the device; a confirmed command shows a green ring with the
+  read-back latency, and a failure a red one. The last five events are listed bottom left.
+- **Interactive.** Drag to orbit, scroll to zoom, click a device (or its label) to see all its
+  attributes and send commands. Commands go through the same dry run, execute and read-back
+  as everywhere else.
+- **Works with no internet.** Three.js r169 (MIT) is vendored in
+  `porch_hub/dashboard/vendor/three/` and served by the hub at `/vendor/three/`.
+- **Other homes.** Devices are placed by type, and two plugs are told apart by name ("heater",
+  "lamp"). A device the scene has no model for appears as a labelled box in its room.
+
+The approach follows [Clawblox](https://github.com/nacloos/clawblox)'s renderers: the server owns
+the state and streams it, and the browser only turns the latest state into a Three.js scene.
 
 ## Deduplication
 
