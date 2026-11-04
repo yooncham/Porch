@@ -25,7 +25,7 @@ build-backend = "setuptools.build_meta"
 include = ["porch_hub*", "engine_lite*", "bench*"]
 
 [tool.setuptools.package-data]
-porch_hub = ["dashboard/*.html", "dashboard/vendor/three/*"]
+porch_hub = ["dashboard/*.html", "dashboard/*.js", "dashboard/vendor/three/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

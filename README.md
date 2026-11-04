@@ -31,7 +31,8 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev,engine]"
 .venv/bin/uvicorn porch_hub.main:app --port 8000
 ```
 
-Open http://localhost:8000/dashboard and http://localhost:8000/home-3d (the home in 3D).
+Open http://localhost:8000/: the home page links every page with what it is for, and every page
+has a **Pages** button in its header that opens the same menu.
 
 **Terminal 2, engine_lite** (a stand-in for the Porch Engine; this terminal is the audit trail):
 
@@ -91,7 +92,8 @@ http://localhost:8000/docs.
 | `POST /devices/{id}/commands` | `{status, state_after, latency_ms, idempotency_key, error}` |
 | `POST /devices/{id}/simulate` | Dry run: `{simulated_state_after, would_succeed, estimated_latency_ms, control_path, reason}` |
 | `WS /events`, `WS /ws/events` | One JSON event per device change or command, from the moment of connecting |
-| `GET /dashboard` | The live dashboard (also at `/`) |
+| `GET /` | The home page: every page, what each is for, and the hub's live status |
+| `GET /dashboard` | The live dashboard |
 | `GET /stage` | The projector display for live demos |
 | `GET /digital-twin` | The 2D floor plan: physical hardware beside its digital copy |
 | `GET /home-3d` | The home and its devices in 3D (Three.js), live from the event stream |

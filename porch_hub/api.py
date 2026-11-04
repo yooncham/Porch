@@ -103,30 +103,41 @@ async def set_shadow_attribute(device_id: str, body: AttributeChange, hub: Hub =
     return hub.digital_copy.set_attribute(device, body.cluster, body.attribute, body.value)
 
 
-@router.get("/", include_in_schema=False)
-async def home() -> RedirectResponse:
-    return RedirectResponse("/dashboard")
+def _page(name: str) -> HTMLResponse:
+    """One self-contained page from porch_hub/dashboard, never cached so a restart shows the new one."""
+    page = resources.files("porch_hub").joinpath(f"dashboard/{name}").read_text(encoding="utf-8")
+    return HTMLResponse(page, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/", response_class=HTMLResponse, include_in_schema=False)
+async def home() -> HTMLResponse:
+    """The home page: every page the hub serves, what each is for, and the hub's live status."""
+    return _page("home.html")
+
+
+@router.get("/nav.js", include_in_schema=False)
+async def nav_script() -> Response:
+    """The Pages menu shared by every page."""
+    script = resources.files("porch_hub").joinpath("dashboard/nav.js").read_text(encoding="utf-8")
+    return Response(script, media_type="text/javascript", headers={"Cache-Control": "no-store"})
 
 
 @router.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard() -> HTMLResponse:
-    """The live dashboard: one self-contained page, served by the hub itself."""
-    page = resources.files("porch_hub").joinpath("dashboard/index.html").read_text(encoding="utf-8")
-    return HTMLResponse(page, headers={"Cache-Control": "no-store"})
+    """The live dashboard: devices, commands and read-back."""
+    return _page("index.html")
 
 
 @router.get("/digital-twin", response_class=HTMLResponse, include_in_schema=False)
 async def digital_twin() -> HTMLResponse:
     """The 2D digital twin: floor plan, physical vs digital-copy layers, Engine pulses, stage scenarios."""
-    page = resources.files("porch_hub").joinpath("dashboard/digital-twin.html").read_text(encoding="utf-8")
-    return HTMLResponse(page, headers={"Cache-Control": "no-store"})
+    return _page("digital-twin.html")
 
 
 @router.get("/home-3d", response_class=HTMLResponse, include_in_schema=False)
 async def home_3d() -> HTMLResponse:
     """The 3D digital twin: the home and its devices in Three.js, live from /ws/events."""
-    page = resources.files("porch_hub").joinpath("dashboard/home-3d.html").read_text(encoding="utf-8")
-    return HTMLResponse(page, headers={"Cache-Control": "no-store"})
+    return _page("home-3d.html")
 
 
 # Three.js, served by the hub so the 3D page needs no internet. Only these files, by name.
@@ -144,8 +155,7 @@ async def vendor_three(name: str) -> Response:
 @router.get("/stage", response_class=HTMLResponse, include_in_schema=False)
 async def stage() -> HTMLResponse:
     """The projector display for live demos: agents, safety alerts, hardware, digital copy, audit."""
-    page = resources.files("porch_hub").joinpath("dashboard/stage.html").read_text(encoding="utf-8")
-    return HTMLResponse(page, headers={"Cache-Control": "no-store"})
+    return _page("stage.html")
 
 
 @router.websocket("/events")

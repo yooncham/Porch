@@ -66,13 +66,17 @@ table{border-collapse:collapse;text-indent:0}
     document.head.appendChild(tailwind);
   }
 </script>
+<script src="/nav.js" defer></script>
 </head>
 <body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
 <header class="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/90 backdrop-blur">
   <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
-    <div>
+    <div class="flex items-center gap-3">
+      <porch-nav></porch-nav>
+      <div>
       <h1 class="text-lg font-semibold">Porch Device Hub</h1>
       <p class="text-xs text-slate-400">Interface v0 · live registry, commands and read-back</p>
+      </div>
     </div>
     <div class="flex flex-wrap items-center gap-3">
       <span class="inline-flex items-center gap-2 rounded-full border border-slate-800 px-3 py-1 text-xs text-slate-300">

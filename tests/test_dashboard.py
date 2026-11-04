@@ -30,7 +30,6 @@ def test_dashboard_is_served_by_the_hub():
     assert response.headers["cache-control"] == "no-store"
     assert "<title>Porch Device Hub</title>" in response.text
     assert "/ws/events" in response.text
-    assert client.get("/", follow_redirects=False).headers["location"] == "/dashboard"
     # Tailwind is pinned to an exact version, never a floating major.
     assert re.search(r"@tailwindcss/browser@\d+\.\d+\.\d+", response.text)
 
