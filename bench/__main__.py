@@ -30,11 +30,14 @@ RESULTS = Path(__file__).parent / "results"
 
 
 def _git() -> str:
+    """The commit the benchmark code comes from, with -dirty if anything but results differs from it."""
+    repo = Path(__file__).parent.parent
     try:
         commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
-                                cwd=Path(__file__).parent, check=True).stdout.strip()
-        dirty = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True,
-                               cwd=Path(__file__).parent, check=True).stdout.strip()
+                                cwd=repo, check=True).stdout.strip()
+        # A run's own output is not a code change: leave bench/results out.
+        dirty = subprocess.run(["git", "status", "--porcelain", "--", ".", ":(exclude)bench/results"],
+                               capture_output=True, text=True, cwd=repo, check=True).stdout.strip()
         return commit + ("-dirty" if dirty else "")
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
