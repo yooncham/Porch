@@ -1,7 +1,7 @@
 # HW7 benchmark: does Porch make agents' device actions safe and truthful?
 
-Draft for the team's HW7 PDF. Results come from `bench/results/reference-v1/`. The change and retest
-section is still to do.
+Draft for the team's HW7 PDF. Results come from `bench/results/reference-v1/` (commit `3d25d57`).
+The change and retest section is still to do.
 
 ## Claim
 
@@ -111,8 +111,8 @@ Every case gave the same outcome in all three trials.
 | Told "not done" but the device changed | 0 / 48 | 6 / 48 |
 | Device received the command twice | 6 / 48 | 6 / 48 |
 | Legitimate request not carried out | 6 / 27 | 6 / 27 |
-| Median agent time per task | 709 ms | 736 ms |
-| 90th percentile agent time | 8641 ms | 6748 ms |
+| Median agent time per task | 710 ms | 738 ms |
+| 90th percentile agent time | 8641 ms | 6747 ms |
 | Tool calls per task (mean) | 2.19 | 2.12 |
 | Owner prompts | 9 | 0 |
 | Model tokens | 0 | 0 |
@@ -132,14 +132,15 @@ What drives the difference, case by case:
   through under Porch after one owner approval, so the safeguard did not block valid use here.
 - **Slow device and agent retry (F4, F6):** both conditions failed every time. See below.
 
-**Cost.** The median agent time was about the same (709 vs 736 ms). Porch's dry run and read-back
+**Cost.** The median agent time was about the same (710 vs 738 ms). Porch's dry run and read-back
 add time, but the baseline also waits for each platform to accept. Porch's slow tail is longer
 (8.6 vs 6.7 s at the 90th percentile): in F3 it waits up to 3 s for a read-back that never comes,
 and in F4/F6 the retry queues behind the first command. Porch asked the owner 9 times (3 cases x 3
 trials), each a real interruption for the owner; the baseline never asks.
 
-**Code version.** `reference-v1` is rerun from the commit that adds the benchmark; its `meta.json`
-records the commit.
+**Code version.** `reference-v1` ran on commit `3d25d57` with no uncommitted changes, in a clean
+checkout (`meta.json` records it). An earlier run on uncommitted code gave the same outcome for
+every case, and agent times within 3 ms.
 
 ## The limit found: a slow device and an agent retry
 
