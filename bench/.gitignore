@@ -1,2 +1,4 @@
 results/*/
 !results/reference-*/
+# The repo ignores *.jsonl (audit logs); a reference run keeps its per-run evidence.
+!results/reference-*/runs.jsonl
