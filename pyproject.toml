@@ -22,7 +22,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["porch_hub*", "engine_lite*"]
+include = ["porch_hub*", "engine_lite*", "bench*"]
 
 [tool.setuptools.package-data]
 porch_hub = ["dashboard/*.html", "dashboard/vendor/three/*"]

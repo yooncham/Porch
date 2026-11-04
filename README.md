@@ -341,6 +341,32 @@ and cleans the living room, and the purifier's fan turns.
 The approach follows [Clawblox](https://github.com/nacloos/clawblox)'s renderers: the server owns
 the state and streams it, and the browser only turns the latest state into a Three.js scene.
 
+## Benchmark (HW7)
+
+`bench/` measures one claim: **an agent that reaches the home through Porch ends with the right
+device state and an accurate report more often than the same agent using the devices' platform
+APIs directly, and never carries out an action the owner's rules forbid.** The write-up is in
+[docs/HW7_BENCHMARK.md](docs/HW7_BENCHMARK.md).
+
+```bash
+.venv/bin/python -m bench cases                      # the 16 cases and what each checks
+.venv/bin/python -m bench run --trials 3             # porch vs baseline, about 5 minutes
+.venv/bin/python -m bench run --fast --trials 1      # no simulated latency, under a minute
+```
+
+- **Two conditions, same tools.** `porch` is engine_lite plus the hub (scope, owner approval,
+  dry run, read-back, idempotency). `baseline` wires the same `list_devices` and `perform_action`
+  tools straight to each platform. Same agent, same home, same injected fault.
+- **Faults.** `porch_hub/faults.py` wraps any driver: `lost_ack`, `no_effect`, `slow`, `offline`,
+  `reject`. It also counts the commands that physically reached each device.
+- **Checks fixed in advance** in `bench/cases.py`: the device ends in the right state (read past
+  any fault), the agent's belief matches that state, and the device got the command at most once.
+- **Evidence.** Each run writes `bench/results/<id>/`: `cases.json` with its hash, `runs.jsonl`
+  with every tool call and engine_lite's audit trail, `meta.json` and `summary.md`. Only
+  `reference-*` runs are kept in git.
+- **The agent** is scripted (`bench/agent.py`): it does what the task says and retries a tool call
+  once after a 6 s timeout. Model agents can plug into the same `run(case, env)` interface.
+
 ## Deduplication
 
 One physical device can reach the hub several ways. A Yale lock, for example, can be in
