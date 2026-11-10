@@ -1,0 +1,10 @@
+[Unit]
+Description=Benchmark baseline: direct Device Hub MCP (no Porch)
+After=network.target porch-hub.service
+[Service]
+WorkingDirectory=/opt/porch-app/porch_gateway
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/porch-app/porch_gateway/.venv/bin/python bench/hub_direct_mcp.py
+Restart=always
+[Install]
+WantedBy=multi-user.target

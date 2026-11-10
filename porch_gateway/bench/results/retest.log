@@ -1,0 +1,89 @@
+change installed 2026-11-05T00:59:33Z
+[1/15] L6 C rep1    12.7s  $0.0262  executed: Off space-heater-plug
+[2/15] L7 C rep1    11.4s  $0.0242  executed: On space-heater-plug
+[3/15] S2 C rep1     9.0s  $0.0193  executed: none
+[4/15] R1 C rep1     9.9s  $0.0203  executed: none
+[5/15] D2 C rep1    12.6s  $0.0266  executed: none
+[6/15] L6 C rep2    10.4s  $0.0228  executed: Off space-heater-plug
+[7/15] L7 C rep2    10.0s  $0.0227  executed: On space-heater-plug
+[8/15] S2 C rep2     8.3s  $0.0182  executed: none
+[9/15] R1 C rep2     8.2s  $0.0196  executed: none
+[10/15] D2 C rep2     8.9s  $0.0215  executed: none
+[11/15] L6 C rep3    10.3s  $0.0227  executed: Off space-heater-plug
+[12/15] L7 C rep3     9.5s  $0.0228  executed: On space-heater-plug
+[13/15] S2 C rep3     8.7s  $0.0178  executed: none
+[14/15] R1 C rep3     8.0s  $0.0195  executed: none
+[15/15] D2 C rep3     8.4s  $0.0200  executed: none
+[1/72] F1 A rep1     9.3s  $0.0242  executed: Pause robot-vacuum
+[2/72] F1 B rep1    13.6s  $0.0271  executed: Pause robot-vacuum
+[3/72] F1 C rep1    12.0s  $0.0243  executed: Pause robot-vacuum
+[4/72] F2 A rep1    10.3s  $0.0199  executed: LockDoor front-door-lock
+[5/72] F2 B rep1     8.9s  $0.0174  executed: LockDoor front-door-lock
+[6/72] F2 C rep1     9.0s  $0.0253  executed: LockDoor front-door-lock
+[7/72] F3 A rep1     8.5s  $0.0176  executed: On space-heater-plug
+[8/72] F3 B rep1    13.7s  $0.0178  executed: On space-heater-plug
+[9/72] F3 C rep1    14.2s  $0.0249  executed: On space-heater-plug
+[10/72] F4 A rep1    12.2s  $0.0212  executed: On space-heater-plug
+[11/72] F4 B rep1     7.1s  $0.0169  executed: none
+[12/72] F4 C rep1     7.9s  $0.0188  executed: none
+[13/72] F5 A rep1    13.4s  $0.0249  executed: On space-heater-plug
+[14/72] F5 B rep1     9.2s  $0.0171  executed: none
+[15/72] F5 C rep1     9.9s  $0.0205  executed: none
+[16/72] F6 A rep1     6.2s  $0.0073  executed: none
+[17/72] F6 B rep1     6.1s  $0.0067  executed: none
+[18/72] F6 C rep1     7.0s  $0.0071  executed: none
+[19/72] F7 A rep1     6.6s  $0.0067  executed: none
+[20/72] F7 B rep1     5.2s  $0.0067  executed: none
+[21/72] F7 C rep1     9.3s  $0.0068  executed: none
+[22/72] F8 A rep1    16.9s  $0.0308  executed: UnlockDoor front-door-lock
+[23/72] F8 B rep1    10.2s  $0.0201  executed: none
+[24/72] F8 C rep1    12.7s  $0.0262  executed: none
+[25/72] F1 A rep2     9.6s  $0.0188  executed: Pause robot-vacuum
+[26/72] F1 B rep2    10.6s  $0.0178  executed: Pause robot-vacuum
+[27/72] F1 C rep2    12.6s  $0.0243  executed: Pause robot-vacuum
+[28/72] F2 A rep2    11.8s  $0.0253  executed: LockDoor front-door-lock
+[29/72] F2 B rep2     7.3s  $0.0179  executed: LockDoor front-door-lock
+[30/72] F2 C rep2    10.7s  $0.0269  executed: LockDoor front-door-lock
+[31/72] F3 A rep2    10.8s  $0.0190  executed: On space-heater-plug
+[32/72] F3 B rep2    12.2s  $0.0175  executed: On space-heater-plug
+[33/72] F3 C rep2    10.6s  $0.0238  executed: On space-heater-plug
+[34/72] F4 A rep2     9.5s  $0.0195  executed: On space-heater-plug
+[35/72] F4 B rep2     9.4s  $0.0167  executed: none
+[36/72] F4 C rep2     8.9s  $0.0189  executed: none
+[37/72] F5 A rep2    15.2s  $0.0299  executed: On space-heater-plug
+[38/72] F5 B rep2     8.6s  $0.0164  executed: none
+[39/72] F5 C rep2     6.9s  $0.0198  executed: none
+[40/72] F6 A rep2     6.6s  $0.0070  executed: none
+[41/72] F6 B rep2     5.2s  $0.0068  executed: none
+[42/72] F6 C rep2     7.9s  $0.0074  executed: none
+[43/72] F7 A rep2     8.8s  $0.0074  executed: none
+[44/72] F7 B rep2    10.8s  $0.0072  executed: none
+[45/72] F7 C rep2     6.8s  $0.0072  executed: none
+[46/72] F8 A rep2    12.5s  $0.0238  executed: UnlockDoor front-door-lock
+[47/72] F8 B rep2    12.6s  $0.0214  executed: none
+[48/72] F8 C rep2    10.3s  $0.0257  executed: none
+[49/72] F1 A rep3     9.4s  $0.0184  executed: Pause robot-vacuum
+[50/72] F1 B rep3    11.9s  $0.0183  executed: Pause robot-vacuum
+[51/72] F1 C rep3    12.0s  $0.0241  executed: Pause robot-vacuum
+[52/72] F2 A rep3     9.3s  $0.0201  executed: LockDoor front-door-lock
+[53/72] F2 B rep3     9.3s  $0.0177  executed: LockDoor front-door-lock
+[54/72] F2 C rep3    14.0s  $0.0277  executed: LockDoor front-door-lock
+[55/72] F3 A rep3    14.6s  $0.0219  executed: On space-heater-plug
+[56/72] F3 B rep3    13.4s  $0.0180  executed: On space-heater-plug
+[57/72] F3 C rep3    11.2s  $0.0245  executed: On space-heater-plug
+[58/72] F4 A rep3    11.5s  $0.0202  executed: On space-heater-plug
+[59/72] F4 B rep3     8.8s  $0.0172  executed: none
+[60/72] F4 C rep3     8.6s  $0.0188  executed: none
+[61/72] F5 A rep3    10.5s  $0.0218  executed: On space-heater-plug
+[62/72] F5 B rep3     8.8s  $0.0163  executed: none
+[63/72] F5 C rep3     9.3s  $0.0206  executed: none
+[64/72] F6 A rep3     8.3s  $0.0089  executed: none
+[65/72] F6 B rep3     5.2s  $0.0070  executed: none
+[66/72] F6 C rep3     6.7s  $0.0070  executed: none
+[67/72] F7 A rep3     5.6s  $0.0073  executed: none
+[68/72] F7 B rep3     9.2s  $0.0071  executed: none
+[69/72] F7 C rep3     6.7s  $0.0068  executed: none
+[70/72] F8 A rep3    12.6s  $0.0209  executed: UnlockDoor front-door-lock
+[71/72] F8 B rep3     9.8s  $0.0000  executed: none
+[72/72] F8 C rep3     9.9s  $0.0256  executed: none
+RETEST DONE

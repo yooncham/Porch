@@ -1,0 +1,4 @@
+05ef1d1d6faf7520d952315e2040ed69eaedc43ddf1f5bd3417248a761ea171e  cases.json
+ad0bf6351335e3e3c52ed020ef396bb966d9896f0406a83b2f392df81940b9a7  fresh_cases.json
+4a05060bd4bd592265ea705d13a723402716a8b10957830ff1beb536271eee14  policy.md
+written 2026-11-04T19:58:34Z, before inspecting any tuning results

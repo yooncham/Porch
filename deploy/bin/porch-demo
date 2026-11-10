@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# One-window demo layout: Porch log on top, agent bottom-left, owner bottom-right.
+S=porch
+tmux kill-session -t $S 2>/dev/null
+reset-demo >/dev/null
+tmux new-session -d -s $S -x 200 -y 50 -n demo "journalctl -fu porch-gateway -o cat -n 0"
+tmux set-option -t $S mouse on
+tmux set-option -t $S pane-border-status top
+tmux set-option -t $S pane-border-format " #{pane_title} "
+tmux select-pane -t $S:demo.0 -T "PORCH LOG"
+tmux split-window -v -l 65% -t $S:demo "bash --norc"
+tmux select-pane -t $S:demo.1 -T "AGENT: type energy, then later concierge"
+tmux split-window -h -l 30% -t $S:demo.1 "bash --norc"
+tmux select-pane -t $S:demo.2 -T "OWNER: approve | reset-demo"
+tmux send-keys -t $S:demo.2 "cd /opt/porch-app/porch_gateway; clear" Enter
+tmux send-keys -t $S:demo.1 "clear; energy" Enter
+tmux select-pane -t $S:demo.1
+exec tmux attach -t $S

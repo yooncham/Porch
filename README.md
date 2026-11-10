@@ -14,6 +14,12 @@ Engine ──HTTP──▶ api.py ──▶ CommandRouter ──▶ DeviceRegist
 New here? The [field guide](docs/FIELD_GUIDE.md) explains what each part does and walks
 through running the whole system step by step.
 
+**This repo also holds the Porch gateway**, the agent-facing layer that sits in front of this hub.
+- **[`porch_gateway/`](porch_gateway/README.md):** the MCP server agents connect to, with per-agent keys, scopes, safety rules, owner approvals, dry runs, verification and the audit log. It also holds the HW7 benchmark the team submitted, the demo scripts, and how to run the gateway and hub together locally.
+- **[`deploy/`](deploy/README.md):** how the demo server is set up and how to deploy `main` to it.
+
+`engine_lite/` (below) is the hub's own stand-in for the gateway, used by this README's walkthrough.
+
 ## See the MVP work
 
 About five minutes, no API key, all devices simulated. You need Python 3.11 or newer and

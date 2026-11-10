@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+cd /opt/porch-app/porch_gateway && exec .venv/bin/python owner.py reset
