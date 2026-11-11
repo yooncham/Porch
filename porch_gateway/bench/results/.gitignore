@@ -1,0 +1,2 @@
+# Keep the HW7 benchmark evidence (raw runs and grades) in git, despite the repo-wide *.jsonl rule.
+!*.jsonl

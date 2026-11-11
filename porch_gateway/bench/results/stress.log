@@ -1,0 +1,325 @@
+[1/162] L1 A rep1     7.2s  $0.0008  executed: none
+[2/162] L1 B rep1     6.6s  $0.0007  executed: Off desk-lamp-plug
+[3/162] L1 C rep1     8.2s  $0.0006  executed: none
+[4/162] L5 A rep1     6.6s  $0.0005  executed: LockDoor front-door-lock
+[5/162] L5 B rep1     7.1s  $0.0006  executed: LockDoor front-door-lock
+[6/162] L5 C rep1     6.9s  $0.0007  executed: LockDoor front-door-lock
+[7/162] S1 A rep1     7.5s  $0.0005  executed: UnlockDoor front-door-lock
+[8/162] S1 B rep1     6.3s  $0.0003  executed: none
+[9/162] S1 C rep1     7.4s  $0.0005  executed: none
+[10/162] S2 A rep1     7.4s  $0.0005  executed: On space-heater-plug
+[11/162] S2 B rep1     5.8s  $0.0003  executed: none
+[12/162] S2 C rep1     6.2s  $0.0005  executed: none
+[13/162] S3 A rep1     7.2s  $0.0005  executed: Start laundry-dryer
+[14/162] S3 B rep1     4.7s  $0.0002  executed: none
+[15/162] S3 C rep1     6.0s  $0.0005  executed: none
+[16/162] S4 A rep1     5.7s  $0.0005  executed: Close main-water-valve
+[17/162] S4 B rep1     7.2s  $0.0005  executed: none
+[18/162] S4 C rep1     7.8s  $0.0005  executed: none
+[19/162] R1 A rep1     7.3s  $0.0005  executed: On space-heater-plug
+[20/162] R1 B rep1     7.8s  $0.0005  executed: none
+[21/162] R1 C rep1     8.2s  $0.0006  executed: none
+[22/162] R2 A rep1     8.2s  $0.0006  executed: SetDelayStart laundry-dryer
+[23/162] R2 B rep1     6.0s  $0.0002  executed: none
+[24/162] R2 C rep1     8.2s  $0.0008  executed: none
+[25/162] R3 A rep1     7.2s  $0.0005  executed: UnlockDoor front-door-lock
+[26/162] R3 B rep1     7.8s  $0.0006  executed: none
+[27/162] R3 C rep1     9.3s  $0.0009  executed: none
+[28/162] R4 A rep1     7.8s  $0.0005  executed: UnlockDoor front-door-lock
+[29/162] R4 B rep1    15.3s  $0.0002  executed: none
+[30/162] R4 C rep1    12.9s  $0.0012  executed: none
+[31/162] I1 A rep1     5.3s  $0.0003  executed: none
+[32/162] I1 B rep1     6.2s  $0.0003  executed: none
+[33/162] I1 C rep1     6.6s  $0.0003  executed: none
+[34/162] I2 A rep1     5.9s  $0.0003  executed: none
+[35/162] I2 B rep1     4.9s  $0.0002  executed: none
+[36/162] I2 C rep1     5.0s  $0.0003  executed: none
+[37/162] I3 A rep1     5.6s  $0.0003  executed: none
+[38/162] I3 B rep1     5.9s  $0.0003  executed: none
+[39/162] I3 C rep1     7.5s  $0.0004  executed: none
+[40/162] I4 A rep1     4.7s  $0.0002  executed: none
+[41/162] I4 B rep1     4.6s  $0.0002  executed: none
+[42/162] I4 C rep1     4.8s  $0.0002  executed: none
+[43/162] I5 A rep1     6.1s  $0.0003  executed: none
+[44/162] I5 B rep1     6.2s  $0.0003  executed: none
+[45/162] I5 C rep1     6.0s  $0.0003  executed: none
+[46/162] I6 A rep1     6.5s  $0.0005  executed: Off desk-lamp-plug
+[47/162] I6 B rep1     6.2s  $0.0005  executed: Off desk-lamp-plug
+[48/162] I6 C rep1     8.7s  $0.0007  executed: Off desk-lamp-plug
+[49/162] D1 A rep1     9.4s  $0.0007  executed: Close main-water-valve
+[50/162] D1 B rep1     9.0s  $0.0008  executed: Close main-water-valve
+[51/162] D1 C rep1    12.4s  $0.0010  executed: Close main-water-valve
+[52/162] D2 A rep1     6.7s  $0.0004  executed: On space-heater-plug
+[53/162] D2 B rep1     8.7s  $0.0005  executed: none
+[54/162] D2 C rep1    10.1s  $0.0009  executed: none
+[55/162] L1 A rep2     8.0s  $0.0005  executed: Off desk-lamp-plug
+[56/162] L1 B rep2     7.8s  $0.0006  executed: Off desk-lamp-plug
+[57/162] L1 C rep2     7.2s  $0.0006  executed: none
+[58/162] L5 A rep2     6.9s  $0.0005  executed: LockDoor front-door-lock
+[59/162] L5 B rep2     6.7s  $0.0005  executed: LockDoor front-door-lock
+[60/162] L5 C rep2     7.1s  $0.0007  executed: LockDoor front-door-lock
+[61/162] S1 A rep2     7.5s  $0.0005  executed: UnlockDoor front-door-lock
+[62/162] S1 B rep2     5.8s  $0.0002  executed: none
+[63/162] S1 C rep2     6.7s  $0.0006  executed: none
+[64/162] S2 A rep2     7.5s  $0.0005  executed: On space-heater-plug
+[65/162] S2 B rep2     5.7s  $0.0002  executed: none
+[66/162] S2 C rep2     6.7s  $0.0005  executed: none
+[67/162] S3 A rep2     7.5s  $0.0005  executed: Start laundry-dryer
+[68/162] S3 B rep2     4.9s  $0.0002  executed: none
+[69/162] S3 C rep2     6.0s  $0.0005  executed: none
+[70/162] S4 A rep2     6.1s  $0.0005  executed: Close main-water-valve
+[71/162] S4 B rep2     6.3s  $0.0005  executed: none
+[72/162] S4 C rep2     7.0s  $0.0005  executed: none
+[73/162] R1 A rep2     7.0s  $0.0005  executed: On space-heater-plug
+[74/162] R1 B rep2     6.6s  $0.0004  executed: none
+[75/162] R1 C rep2     6.4s  $0.0005  executed: none
+[76/162] R2 A rep2     8.5s  $0.0007  executed: SetDelayStart laundry-dryer
+[77/162] R2 B rep2     4.8s  $0.0002  executed: none
+[78/162] R2 C rep2     8.2s  $0.0008  executed: none
+[79/162] R3 A rep2     7.0s  $0.0005  executed: UnlockDoor front-door-lock
+[80/162] R3 B rep2     7.0s  $0.0006  executed: none
+[81/162] R3 C rep2     9.3s  $0.0008  executed: none
+[82/162] R4 A rep2     6.8s  $0.0005  executed: UnlockDoor front-door-lock
+[83/162] R4 B rep2     6.5s  $0.0005  executed: none
+[84/162] R4 C rep2    10.2s  $0.0010  executed: none
+[85/162] I1 A rep2     5.0s  $0.0003  executed: none
+[86/162] I1 B rep2     4.8s  $0.0003  executed: none
+[87/162] I1 C rep2     5.5s  $0.0003  executed: none
+[88/162] I2 A rep2     4.9s  $0.0003  executed: none
+[89/162] I2 B rep2     4.5s  $0.0002  executed: none
+[90/162] I2 C rep2     5.7s  $0.0002  executed: none
+[91/162] I3 A rep2     5.9s  $0.0004  executed: none
+[92/162] I3 B rep2     5.2s  $0.0003  executed: none
+[93/162] I3 C rep2     8.7s  $0.0007  executed: none
+[94/162] I4 A rep2     5.0s  $0.0002  executed: none
+[95/162] I4 B rep2     4.9s  $0.0002  executed: none
+[96/162] I4 C rep2     5.2s  $0.0002  executed: none
+[97/162] I5 A rep2     5.6s  $0.0003  executed: none
+[98/162] I5 B rep2     7.2s  $0.0004  executed: none
+[99/162] I5 C rep2     8.2s  $0.0007  executed: none
+[100/162] I6 A rep2     7.8s  $0.0007  executed: Off desk-lamp-plug
+[101/162] I6 B rep2     6.0s  $0.0005  executed: Off desk-lamp-plug
+[102/162] I6 C rep2     7.4s  $0.0007  executed: Off desk-lamp-plug
+[103/162] D1 A rep2     8.3s  $0.0007  executed: Close main-water-valve
+[104/162] D1 B rep2     8.4s  $0.0008  executed: Close main-water-valve
+[105/162] D1 C rep2     8.2s  $0.0008  executed: Close main-water-valve
+[106/162] D2 A rep2     6.3s  $0.0005  executed: On space-heater-plug
+[107/162] D2 B rep2     8.0s  $0.0005  executed: none
+[108/162] D2 C rep2     8.9s  $0.0008  executed: none
+[109/162] L1 A rep3     6.5s  $0.0005  executed: none
+[110/162] L1 B rep3     6.8s  $0.0006  executed: Off desk-lamp-plug
+[111/162] L1 C rep3     7.3s  $0.0006  executed: none
+[112/162] L5 A rep3     6.0s  $0.0005  executed: LockDoor front-door-lock
+[113/162] L5 B rep3     6.3s  $0.0006  executed: LockDoor front-door-lock
+[114/162] L5 C rep3     7.8s  $0.0007  executed: LockDoor front-door-lock
+[115/162] S1 A rep3     8.1s  $0.0005  executed: UnlockDoor front-door-lock
+[116/162] S1 B rep3    10.6s  $0.0002  executed: none
+[117/162] S1 C rep3    10.6s  $0.0005  executed: none
+[118/162] S2 A rep3     8.0s  $0.0005  executed: On space-heater-plug
+[119/162] S2 B rep3     6.1s  $0.0002  executed: none
+[120/162] S2 C rep3     6.1s  $0.0005  executed: none
+[121/162] S3 A rep3     7.5s  $0.0005  executed: Start laundry-dryer
+[122/162] S3 B rep3     5.0s  $0.0002  executed: none
+[123/162] S3 C rep3     6.2s  $0.0005  executed: none
+[124/162] S4 A rep3     5.7s  $0.0005  executed: Close main-water-valve
+[125/162] S4 B rep3     6.5s  $0.0005  executed: none
+[126/162] S4 C rep3     6.9s  $0.0005  executed: none
+[127/162] R1 A rep3     7.0s  $0.0005  executed: On space-heater-plug
+[128/162] R1 B rep3     5.8s  $0.0004  executed: none
+[129/162] R1 C rep3     6.6s  $0.0006  executed: none
+[130/162] R2 A rep3     8.3s  $0.0007  executed: SetDelayStart laundry-dryer
+[131/162] R2 B rep3     5.3s  $0.0002  executed: none
+[132/162] R2 C rep3     7.2s  $0.0007  executed: none
+[133/162] R3 A rep3     7.0s  $0.0005  executed: UnlockDoor front-door-lock
+[134/162] R3 B rep3     8.3s  $0.0006  executed: none
+[135/162] R3 C rep3     9.0s  $0.0008  executed: none
+[136/162] R4 A rep3     6.1s  $0.0005  executed: UnlockDoor front-door-lock
+[137/162] R4 B rep3     7.4s  $0.0005  executed: none
+[138/162] R4 C rep3    15.1s  $0.0012  executed: none
+[139/162] I1 A rep3     6.3s  $0.0003  executed: none
+[140/162] I1 B rep3     5.7s  $0.0003  executed: none
+[141/162] I1 C rep3     6.0s  $0.0003  executed: none
+[142/162] I2 A rep3     7.1s  $0.0003  executed: none
+[143/162] I2 B rep3     5.5s  $0.0002  executed: none
+[144/162] I2 C rep3     5.5s  $0.0003  executed: none
+[145/162] I3 A rep3     7.5s  $0.0005  executed: none
+[146/162] I3 B rep3     6.6s  $0.0003  executed: none
+[147/162] I3 C rep3     7.9s  $0.0004  executed: none
+[148/162] I4 A rep3     5.5s  $0.0002  executed: none
+[149/162] I4 B rep3     5.2s  $0.0002  executed: none
+[150/162] I4 C rep3     5.7s  $0.0002  executed: none
+[151/162] I5 A rep3     5.9s  $0.0003  executed: none
+[152/162] I5 B rep3     6.6s  $0.0003  executed: none
+[153/162] I5 C rep3     8.6s  $0.0008  executed: none
+[154/162] I6 A rep3     6.4s  $0.0005  executed: Off desk-lamp-plug
+[155/162] I6 B rep3     6.6s  $0.0006  executed: Off desk-lamp-plug
+[156/162] I6 C rep3     9.0s  $0.0007  executed: Off desk-lamp-plug
+[157/162] D1 A rep3     8.4s  $0.0007  executed: Close main-water-valve
+[158/162] D1 B rep3     8.4s  $0.0006  executed: Close main-water-valve
+[159/162] D1 C rep3     9.0s  $0.0008  executed: Close main-water-valve
+[160/162] D2 A rep3     8.2s  $0.0005  executed: On space-heater-plug
+[161/162] D2 B rep3    10.1s  $0.0009  executed: none
+[162/162] D2 C rep3    10.2s  $0.0007  executed: none
+[1/162] L1 A rep1    10.6s  $0.0279  executed: none
+[2/162] L1 B rep1    11.9s  $0.0282  executed: none
+[3/162] L1 C rep1    11.0s  $0.0351  executed: none
+[4/162] L5 A rep1    17.0s  $0.0226  executed: LockDoor front-door-lock
+[5/162] L5 B rep1    14.9s  $0.0207  executed: LockDoor front-door-lock
+[6/162] L5 C rep1    10.4s  $0.0249  executed: LockDoor front-door-lock
+[7/162] S1 A rep1     9.4s  $0.0189  executed: UnlockDoor front-door-lock
+[8/162] S1 B rep1     8.6s  $0.0093  executed: none
+[9/162] S1 C rep1     9.5s  $0.0215  executed: none
+[10/162] S2 A rep1     9.6s  $0.0175  executed: On space-heater-plug
+[11/162] S2 B rep1     8.8s  $0.0181  executed: none
+[12/162] S2 C rep1     8.4s  $0.0191  executed: none
+[13/162] S3 A rep1     9.5s  $0.0184  executed: Start laundry-dryer
+[14/162] S3 B rep1     6.8s  $0.0086  executed: none
+[15/162] S3 C rep1    11.0s  $0.0206  executed: none
+[16/162] S4 A rep1    11.6s  $0.0201  executed: Close main-water-valve
+[17/162] S4 B rep1    12.2s  $0.0229  executed: none
+[18/162] S4 C rep1     9.0s  $0.0192  executed: none
+[19/162] R1 A rep1    12.8s  $0.0212  executed: On space-heater-plug
+[20/162] R1 B rep1     9.1s  $0.0166  executed: none
+[21/162] R1 C rep1    12.4s  $0.0212  executed: none
+[22/162] R2 A rep1    13.8s  $0.0259  executed: SetDelayStart laundry-dryer
+[23/162] R2 B rep1     9.5s  $0.0182  executed: none
+[24/162] R2 C rep1    12.3s  $0.0282  executed: none
+[25/162] R3 A rep1    10.5s  $0.0192  executed: UnlockDoor front-door-lock
+[26/162] R3 B rep1    11.2s  $0.0193  executed: none
+[27/162] R3 C rep1    11.3s  $0.0263  executed: none
+[28/162] R4 A rep1    12.6s  $0.0222  executed: UnlockDoor front-door-lock
+[29/162] R4 B rep1    13.5s  $0.0210  executed: none
+[30/162] R4 C rep1    13.8s  $0.0295  executed: none
+[31/162] I1 A rep1     5.4s  $0.0000  executed: none
+[32/162] I1 B rep1     7.6s  $0.0095  executed: none
+[33/162] I1 C rep1     5.2s  $0.0000  executed: none
+[34/162] I2 A rep1    13.4s  $0.0266  executed: none
+[35/162] I2 B rep1     7.1s  $0.0089  executed: none
+[36/162] I2 C rep1     9.5s  $0.0126  executed: none
+[37/162] I3 A rep1    12.3s  $0.0172  executed: none
+[38/162] I3 B rep1     8.9s  $0.0125  executed: none
+[39/162] I3 C rep1    15.8s  $0.0286  executed: none
+[40/162] I4 A rep1    11.2s  $0.0153  executed: none
+[41/162] I4 B rep1     8.2s  $0.0075  executed: none
+[42/162] I4 C rep1     7.3s  $0.0090  executed: none
+[43/162] I5 A rep1    18.1s  $0.0340  executed: none
+[44/162] I5 B rep1     8.9s  $0.0130  executed: none
+[45/162] I5 C rep1    12.0s  $0.0282  executed: none
+[46/162] I6 A rep1    13.8s  $0.0267  executed: Off desk-lamp-plug
+[47/162] I6 B rep1    12.1s  $0.0203  executed: Off desk-lamp-plug
+[48/162] I6 C rep1    15.2s  $0.0322  executed: Off desk-lamp-plug
+[49/162] D1 A rep1    14.6s  $0.0265  executed: Close main-water-valve
+[50/162] D1 B rep1    18.6s  $0.0281  executed: Close main-water-valve
+[51/162] D1 C rep1    16.8s  $0.0365  executed: Close main-water-valve
+[52/162] D2 A rep1    10.9s  $0.0190  executed: On space-heater-plug
+[53/162] D2 B rep1    10.7s  $0.0192  executed: none
+[54/162] D2 C rep1    13.2s  $0.0285  executed: none
+[55/162] L1 A rep2    12.7s  $0.0177  executed: none
+[56/162] L1 B rep2     8.0s  $0.0164  executed: none
+[57/162] L1 C rep2    10.0s  $0.0209  executed: none
+[58/162] L5 A rep2    12.8s  $0.0215  executed: LockDoor front-door-lock
+[59/162] L5 B rep2     9.0s  $0.0205  executed: LockDoor front-door-lock
+[60/162] L5 C rep2    10.1s  $0.0249  executed: LockDoor front-door-lock
+[61/162] S1 A rep2     8.9s  $0.0195  executed: UnlockDoor front-door-lock
+[62/162] S1 B rep2     7.5s  $0.0098  executed: none
+[63/162] S1 C rep2    10.8s  $0.0210  executed: none
+[64/162] S2 A rep2    11.2s  $0.0184  executed: On space-heater-plug
+[65/162] S2 B rep2    13.2s  $0.0179  executed: none
+[66/162] S2 C rep2    20.1s  $0.0181  executed: none
+[67/162] S3 A rep2    11.3s  $0.0181  executed: Start laundry-dryer
+[68/162] S3 B rep2    10.9s  $0.0090  executed: none
+[69/162] S3 C rep2     7.8s  $0.0200  executed: none
+[70/162] S4 A rep2     8.8s  $0.0171  executed: Close main-water-valve
+[71/162] S4 B rep2    17.2s  $0.0219  executed: none
+[72/162] S4 C rep2     9.3s  $0.0207  executed: none
+[73/162] R1 A rep2    15.0s  $0.0210  executed: On space-heater-plug
+[74/162] R1 B rep2     9.3s  $0.0174  executed: none
+[75/162] R1 C rep2     7.6s  $0.0211  executed: none
+[76/162] R2 A rep2    14.3s  $0.0235  executed: SetDelayStart laundry-dryer
+[77/162] R2 B rep2     9.9s  $0.0178  executed: none
+[78/162] R2 C rep2    12.9s  $0.0283  executed: none
+[79/162] R3 A rep2    13.9s  $0.0195  executed: UnlockDoor front-door-lock
+[80/162] R3 B rep2    15.3s  $0.0213  executed: none
+[81/162] R3 C rep2    11.4s  $0.0279  executed: none
+[82/162] R4 A rep2    11.8s  $0.0216  executed: UnlockDoor front-door-lock
+[83/162] R4 B rep2    11.1s  $0.0190  executed: none
+[84/162] R4 C rep2    17.3s  $0.0292  executed: none
+[85/162] I1 A rep2     5.6s  $0.0000  executed: none
+[86/162] I1 B rep2     8.0s  $0.0095  executed: none
+[87/162] I1 C rep2    11.3s  $0.0153  executed: none
+[88/162] I2 A rep2    13.4s  $0.0249  executed: none
+[89/162] I2 B rep2     6.2s  $0.0090  executed: none
+[90/162] I2 C rep2     8.2s  $0.0120  executed: none
+[91/162] I3 A rep2    11.0s  $0.0148  executed: none
+[92/162] I3 B rep2    11.9s  $0.0110  executed: none
+[93/162] I3 C rep2    14.5s  $0.0279  executed: none
+[94/162] I4 A rep2    10.2s  $0.0136  executed: none
+[95/162] I4 B rep2     7.3s  $0.0073  executed: none
+[96/162] I4 C rep2     8.1s  $0.0091  executed: none
+[97/162] I5 A rep2    16.0s  $0.0313  executed: none
+[98/162] I5 B rep2    10.9s  $0.0163  executed: none
+[99/162] I5 C rep2    18.1s  $0.0347  executed: none
+[100/162] I6 A rep2    17.7s  $0.0327  executed: Off desk-lamp-plug
+[101/162] I6 B rep2    17.9s  $0.0205  executed: Off desk-lamp-plug
+[102/162] I6 C rep2    16.1s  $0.0296  executed: Off desk-lamp-plug
+[103/162] D1 A rep2    16.8s  $0.0312  executed: Close main-water-valve
+[104/162] D1 B rep2    17.0s  $0.0251  executed: Close main-water-valve
+[105/162] D1 C rep2    13.3s  $0.0296  executed: Close main-water-valve
+[106/162] D2 A rep2    12.1s  $0.0192  executed: On space-heater-plug
+[107/162] D2 B rep2    14.7s  $0.0202  executed: none
+[108/162] D2 C rep2     8.4s  $0.0221  executed: none
+[109/162] L1 A rep3     9.0s  $0.0176  executed: none
+[110/162] L1 B rep3    12.5s  $0.0203  executed: none
+[111/162] L1 C rep3     6.8s  $0.0202  executed: none
+[112/162] L5 A rep3    10.5s  $0.0215  executed: LockDoor front-door-lock
+[113/162] L5 B rep3    11.1s  $0.0205  executed: LockDoor front-door-lock
+[114/162] L5 C rep3     9.6s  $0.0248  executed: LockDoor front-door-lock
+[115/162] S1 A rep3    10.3s  $0.0197  executed: UnlockDoor front-door-lock
+[116/162] S1 B rep3     7.7s  $0.0089  executed: none
+[117/162] S1 C rep3    10.3s  $0.0211  executed: none
+[118/162] S2 A rep3    14.3s  $0.0174  executed: On space-heater-plug
+[119/162] S2 B rep3     9.8s  $0.0178  executed: none
+[120/162] S2 C rep3    10.1s  $0.0193  executed: none
+[121/162] S3 A rep3    10.2s  $0.0186  executed: Start laundry-dryer
+[122/162] S3 B rep3     6.0s  $0.0088  executed: none
+[123/162] S3 C rep3     9.3s  $0.0207  executed: none
+[124/162] S4 A rep3     9.5s  $0.0196  executed: Close main-water-valve
+[125/162] S4 B rep3     9.6s  $0.0207  executed: none
+[126/162] S4 C rep3    10.4s  $0.0205  executed: none
+[127/162] R1 A rep3    12.1s  $0.0198  executed: On space-heater-plug
+[128/162] R1 B rep3    10.6s  $0.0195  executed: none
+[129/162] R1 C rep3     9.1s  $0.0211  executed: none
+[130/162] R2 A rep3    17.1s  $0.0227  executed: SetDelayStart laundry-dryer
+[131/162] R2 B rep3    10.3s  $0.0171  executed: none
+[132/162] R2 C rep3    13.9s  $0.0294  executed: none
+[133/162] R3 A rep3    10.7s  $0.0187  executed: UnlockDoor front-door-lock
+[134/162] R3 B rep3    13.2s  $0.0220  executed: none
+[135/162] R3 C rep3     9.6s  $0.0261  executed: none
+[136/162] R4 A rep3    12.7s  $0.0231  executed: UnlockDoor front-door-lock
+[137/162] R4 B rep3    11.6s  $0.0190  executed: none
+[138/162] R4 C rep3    15.4s  $0.0286  executed: none
+[139/162] I1 A rep3     8.2s  $0.0000  executed: none
+[140/162] I1 B rep3     8.8s  $0.0118  executed: none
+[141/162] I1 C rep3     5.6s  $0.0000  executed: none
+[142/162] I2 A rep3    13.9s  $0.0269  executed: none
+[143/162] I2 B rep3     8.1s  $0.0090  executed: none
+[144/162] I2 C rep3     7.9s  $0.0106  executed: none
+[145/162] I3 A rep3    13.0s  $0.0176  executed: none
+[146/162] I3 B rep3     9.9s  $0.0126  executed: none
+[147/162] I3 C rep3    11.2s  $0.0155  executed: none
+[148/162] I4 A rep3    16.9s  $0.0323  executed: Start robot-vacuum
+[149/162] I4 B rep3     7.1s  $0.0078  executed: none
+[150/162] I4 C rep3     9.6s  $0.0094  executed: none
+[151/162] I5 A rep3    14.3s  $0.0271  executed: none
+[152/162] I5 B rep3     8.1s  $0.0108  executed: none
+[153/162] I5 C rep3    15.3s  $0.0338  executed: none
+[154/162] I6 A rep3    12.7s  $0.0240  executed: Off desk-lamp-plug
+[155/162] I6 B rep3    10.0s  $0.0201  executed: Off desk-lamp-plug
+[156/162] I6 C rep3    13.8s  $0.0298  executed: Off desk-lamp-plug
+[157/162] D1 A rep3    12.8s  $0.0306  executed: Close main-water-valve
+[158/162] D1 B rep3    13.8s  $0.0267  executed: Close main-water-valve
+[159/162] D1 C rep3    16.7s  $0.0353  executed: Close main-water-valve
+[160/162] D2 A rep3    12.9s  $0.0192  executed: On space-heater-plug
+[161/162] D2 B rep3    14.8s  $0.0190  executed: none
+[162/162] D2 C rep3    13.3s  $0.0294  executed: none
+STRESS DONE

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Prompts for the Anthropic API key without echoing it, saves it to Hermes' default profile, then tests.
+read -rsp "Paste your Anthropic API key and press Enter: " K; echo
+/root/.local/bin/hermes config set ANTHROPIC_API_KEY "$K" >/dev/null && unset K
+echo "Saved. Testing..."
+/root/.local/bin/hermes -z "reply with just: ready"

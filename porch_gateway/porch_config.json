@@ -1,0 +1,36 @@
+{
+  "hub_url": "http://127.0.0.1:8100",
+  "hardware": "simulated",
+  "owner_key": "owner_demo_key_erik",
+  "agents": {
+    "porch_demo_key_energy": {
+      "id": "energy-agent",
+      "name": "Energy agent",
+      "acts_for": "Erik",
+      "scope_label": "Energy Management Only",
+      "scopes": [
+        "lighting",
+        "appliance"
+      ]
+    },
+    "porch_demo_key_concierge": {
+      "id": "concierge-agent",
+      "name": "Concierge agent",
+      "acts_for": "Yoonchan",
+      "scope_label": "Comfort and Access",
+      "scopes": [
+        "lighting",
+        "heating",
+        "entry"
+      ]
+    }
+  },
+  "device_capabilities": {
+    "home-1/desk-lamp-plug": "lighting",
+    "home-1/space-heater-plug": "heating"
+  },
+  "limits": {
+    "max_delay_start_hours": 12,
+    "approval_ttl_seconds": 600
+  }
+}

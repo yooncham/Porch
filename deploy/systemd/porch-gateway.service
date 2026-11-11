@@ -1,0 +1,11 @@
+[Unit]
+Description=Porch agent gateway (MCP)
+After=network.target porch-hub.service
+Wants=porch-hub.service
+[Service]
+WorkingDirectory=/opt/porch-app/porch_gateway
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/porch-app/porch_gateway/.venv/bin/python porch_gateway.py
+Restart=always
+[Install]
+WantedBy=multi-user.target
