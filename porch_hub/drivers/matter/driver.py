@@ -137,7 +137,7 @@ class MatterDriver(BaseDriver):
         node["attributes"][path] = value
         self._bump(node_id, [path])
         endpoint = self._by_location.get((node_id, parsed[0]))
-        if endpoint is not None and parsed[1] in endpoint.cluster_ids:
+        if endpoint is not None and endpoint.covers(parsed[0], parsed[1]):
             self._push_state(endpoint)
 
     def _on_node_event(self, data: dict[str, Any]) -> None:
@@ -171,9 +171,14 @@ class MatterDriver(BaseDriver):
         self._endpoints = {}
         self._by_location = {}
         for node in self._nodes.values():
-            for endpoint in node_endpoints(node, self._home_id, self._bindings):
+            endpoints = node_endpoints(node, self._home_id, self._bindings)
+            for endpoint in endpoints:
                 self._endpoints[endpoint.device_id] = endpoint
                 self._by_location[(endpoint.node_id, endpoint.endpoint_id)] = endpoint
+            for endpoint in endpoints:
+                # A separate energy endpoint reports for the plug that owns its readings.
+                for linked_endpoint, _ in endpoint.linked:
+                    self._by_location.setdefault((endpoint.node_id, linked_endpoint), endpoint)
 
     def _node_endpoints(self, node_id: int) -> list[MatterEndpoint]:
         return [ep for ep in self._endpoints.values() if ep.node_id == node_id]

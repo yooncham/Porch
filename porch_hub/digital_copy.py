@@ -88,12 +88,15 @@ class _Plan:
 
 class DigitalCopy:
     def __init__(self, registry: DeviceRegistry, drivers: Sequence[BaseDriver],
-                 offline: bool = False, snapshot_path: Path | None = None) -> None:
+                 offline: bool = False, snapshot_path: Path | None = None, demo_fallback: bool = True) -> None:
         self._registry = registry
         self._drivers = list(drivers)
         self._started: set[int] = set()  # ids of drivers whose start() ran
         self._offline = offline
         self._snapshot_path = snapshot_path
+        # An offline start with no saved copy uses the built-in demo home, unless this is a
+        # real-devices-only hub: then it starts with no devices rather than invented ones.
+        self._demo_fallback = demo_fallback
         self._saved_at = 0.0
         self._latency_ms: dict[ControlPath, float] = {p: float(ms) for p, ms in DEFAULT_LATENCY_MS.items()}
         self._responses: dict[str, tuple[str, dict[str, Any], float]] = {}  # key -> (fingerprint, response, saved_at)
@@ -119,9 +122,14 @@ class DigitalCopy:
             # No driver is called in offline mode, not even to list devices.
             self._registry.offline_mode = True
             if not self._load_snapshot():
-                log.warning("no saved digital copy%s; starting from the built-in demo home",
-                            f" at {self._snapshot_path}" if self._snapshot_path else "")
-                self._registry.load_source_records(demo_records())
+                where = f" at {self._snapshot_path}" if self._snapshot_path else ""
+                if self._demo_fallback:
+                    log.warning("no saved digital copy%s; starting from the built-in demo home", where)
+                    self._registry.load_source_records(demo_records())
+                else:
+                    log.warning("no saved digital copy%s; real devices only, so offline mode starts with "
+                                "no devices. Run once online with DIGITAL_COPY_PATH set first.", where)
+                    self._registry.load_source_records([])
             self._registry.mark_all_reachable()
             return
         await self._start_drivers()

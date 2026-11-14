@@ -18,6 +18,10 @@ POWER_SOURCE = "PowerSource"
 FAN_CONTROL = "FanControl"
 AIR_QUALITY = "AirQuality"
 PM25 = "Pm25ConcentrationMeasurement"
+# Read-only readings from energy-monitoring plugs. ActivePower is in milliwatts and
+# CumulativeEnergyImported in milliwatt-hours, as the Matter specification counts them.
+ELECTRICAL_POWER_MEASUREMENT = "ElectricalPowerMeasurement"
+ELECTRICAL_ENERGY_MEASUREMENT = "ElectricalEnergyMeasurement"
 PORCH_LAUNDRY = "PorchLaundryExtension"
 
 

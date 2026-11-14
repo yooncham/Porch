@@ -2,7 +2,7 @@
 
 import logging
 import os
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -38,32 +38,40 @@ class Settings:
     demo_offline_mode: bool = field(default_factory=lambda: env_flag("DEMO_OFFLINE_MODE"))
     # DIGITAL_COPY_PATH: where the digital copy is saved, so an offline start has the rehearsal's devices.
     digital_copy_path: Path | None = field(default_factory=lambda: _env_path("DIGITAL_COPY_PATH"))
+    # PORCH_REAL_DEVICES_ONLY=1: only the live platforms that are configured, and no simulated devices.
+    real_devices_only: bool = field(default_factory=lambda: env_flag("PORCH_REAL_DEVICES_ONLY"))
 
 
-def default_drivers() -> list[BaseDriver]:
+def default_drivers(real_devices_only: bool = False, env: Mapping[str, str] = os.environ) -> list[BaseDriver]:
     """The demo home, with live platforms in place of simulated ones when they are configured.
 
     MATTER_SERVER_URL set: the local Matter Server. LG_THINQ_PAT set: the live LG account.
+    real_devices_only: leave every simulated platform out, Google Home's included.
     """
     home = demo_home()
-    matter: BaseDriver = home.matter
-    thinq: BaseDriver = home.thinq
-    if os.environ.get("MATTER_SERVER_URL"):
-        matter = matter_driver_from_env()
-    if os.environ.get("LG_THINQ_PAT"):
+    matter: BaseDriver | None = None if real_devices_only else home.matter
+    thinq: BaseDriver | None = None if real_devices_only else home.thinq
+    google: BaseDriver | None = None if real_devices_only else home.google
+    if env.get("MATTER_SERVER_URL"):
+        matter = matter_driver_from_env(env)
+    if env.get("LG_THINQ_PAT"):
         from .drivers.thinq.connect import thinq_driver_from_env
 
-        thinq = thinq_driver_from_env()
-    return [matter, thinq, home.google]
+        thinq = thinq_driver_from_env(env)
+    drivers = [d for d in (matter, thinq, google) if d is not None]
+    if not drivers:
+        raise RuntimeError("PORCH_REAL_DEVICES_ONLY=1 needs MATTER_SERVER_URL or LG_THINQ_PAT")
+    return drivers
 
 
 def create_app(drivers: Sequence[BaseDriver] | None = None, settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
-    drivers = list(drivers) if drivers is not None else default_drivers()
+    drivers = list(drivers) if drivers is not None else default_drivers(settings.real_devices_only)
     registry = DeviceRegistry(drivers)
     registry.driver_timeout_s = settings.driver_timeout_s
     digital_copy = DigitalCopy(registry, drivers, offline=settings.demo_offline_mode,
-                               snapshot_path=settings.digital_copy_path)
+                               snapshot_path=settings.digital_copy_path,
+                               demo_fallback=not settings.real_devices_only)
     hub = api.Hub(
         registry=registry,
         commands=CommandRouter(

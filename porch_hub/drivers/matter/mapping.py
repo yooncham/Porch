@@ -30,6 +30,19 @@ def _enum(names: dict[int, str]) -> Callable[[Any], str]:
     return lambda value: "Unknown" if value is None else names.get(value, f"Unknown({value})")
 
 
+def _int(value: Any) -> int | None:
+    """A nullable Matter number. Null means the device has no reading yet."""
+    return None if value is None or isinstance(value, bool) else int(value)
+
+
+def _energy(value: Any) -> int | None:
+    """An EnergyMeasurementStruct reduced to its energy field, in milliwatt-hours."""
+    if not isinstance(value, dict):
+        return None
+    # Struct fields come keyed by name or, from older servers, by tag number (energy is tag 0).
+    return _int(value.get("energy", value.get("0")))
+
+
 @dataclass(frozen=True)
 class ClusterMap:
     cluster_id: int
@@ -53,15 +66,22 @@ CLUSTERS: dict[int, ClusterMap] = {m.cluster_id: m for m in [
     ClusterMap(0x0045, c.BOOLEAN_STATE, {0: ("StateValue", _bool)}, events={0: "StateChange"}),
     ClusterMap(0x0081, c.VALVE, {4: ("CurrentState", _enum({0: "Closed", 1: "Open", 2: "Transitioning"}))},
                {"Open": 0, "Close": 1}),
+    # Readings only, no commands. ActivePower in mW, CumulativeEnergyImported in mWh.
+    ClusterMap(0x0090, c.ELECTRICAL_POWER_MEASUREMENT, {8: ("ActivePower", _int)}),
+    ClusterMap(0x0091, c.ELECTRICAL_ENERGY_MEASUREMENT, {1: ("CumulativeEnergyImported", _energy)}),
 ]}
 
 BOOLEAN_STATE_ID = 0x0045
+ENERGY_CLUSTER_IDS = frozenset({0x0090, 0x0091})
 
 DEVICE_TYPES: dict[int, DeviceType] = {
     0x000A: DeviceType.DOOR_LOCK,
     0x010A: DeviceType.ON_OFF_PLUG,
+    0x010B: DeviceType.ON_OFF_PLUG,  # dimmable plug, controlled as on/off
     0x0100: DeviceType.ON_OFF_LIGHT,
     0x0101: DeviceType.ON_OFF_LIGHT,  # dimmable light, controlled as on/off
+    0x010C: DeviceType.ON_OFF_LIGHT,  # color temperature light, controlled as on/off
+    0x010D: DeviceType.ON_OFF_LIGHT,  # extended color light (for example Tapo L535E), controlled as on/off
     0x0043: DeviceType.WATER_LEAK_SENSOR,
     0x0042: DeviceType.WATER_VALVE,
 }
@@ -99,17 +119,27 @@ class MatterEndpoint:
     cluster_ids: tuple[int, ...]
     serial_number: str | None = None
     mac_address: str | None = None
+    # (endpoint, cluster) pairs read from another endpoint of the same node: a plug whose
+    # energy readings sit on a separate Electrical Sensor endpoint. Never command targets.
+    linked: tuple[tuple[int, int], ...] = ()
+
+    def locations(self) -> list[tuple[int, int]]:
+        """Every (endpoint, cluster) this device's state comes from."""
+        return [(self.endpoint_id, cid) for cid in self.cluster_ids] + list(self.linked)
+
+    def covers(self, endpoint_id: int, cluster_id: int) -> bool:
+        return (endpoint_id, cluster_id) in self.locations()
 
     def attribute_paths(self) -> list[str]:
-        return [f"{self.endpoint_id}/{cid}/{aid}" for cid in self.cluster_ids for aid in CLUSTERS[cid].attributes]
+        return [f"{ep}/{cid}/{aid}" for ep, cid in self.locations() for aid in CLUSTERS[cid].attributes]
 
     def to_clusters(self, attributes: dict[str, Any]) -> Clusters:
         clusters: Clusters = {}
-        for cid in self.cluster_ids:
+        for ep, cid in self.locations():
             cmap = CLUSTERS[cid]
-            values = {name: decode(attributes.get(f"{self.endpoint_id}/{cid}/{aid}"))
+            values = {name: decode(attributes.get(f"{ep}/{cid}/{aid}"))
                       for aid, (name, decode) in cmap.attributes.items()}
-            accepted = attributes.get(f"{self.endpoint_id}/{cid}/{ACCEPTED_COMMAND_LIST}")
+            accepted = attributes.get(f"{ep}/{cid}/{ACCEPTED_COMMAND_LIST}")
             commands = [name for name, cmd_id in cmap.commands.items()
                         if not isinstance(accepted, list) or cmd_id in accepted]
             clusters[cmap.name] = Cluster(attributes=values, commands=commands)
@@ -173,6 +203,8 @@ def node_endpoints(node: dict[str, Any], home_id: str, bindings: dict[str, Matte
         if device_type is not None:
             supported.append((endpoint_id, device_type, tuple(sorted(cluster_ids))))
 
+    linked = _linked_energy(node, clusters_by_endpoint, supported)
+
     endpoints = []
     # A bridge's MAC belongs to the bridge, not to the devices behind it.
     mac = _mac_address(attributes) if not node.get("is_bridge") else None
@@ -186,5 +218,30 @@ def node_endpoints(node: dict[str, Any], home_id: str, bindings: dict[str, Matte
             name = f"{name} ({endpoint_id})"
         endpoints.append(MatterEndpoint(binding.porch_id, node_id, endpoint_id, device_type, name,
                                         binding.room, cluster_ids,
-                                        _serial_number(attributes, endpoint_id, shared_root), mac))
+                                        _serial_number(attributes, endpoint_id, shared_root), mac,
+                                        linked.get(endpoint_id, ())))
     return endpoints
+
+
+def _linked_energy(node: dict[str, Any], clusters_by_endpoint: dict[int, set[int]],
+                   supported: list[tuple[int, DeviceType, tuple[int, ...]]]) -> dict[int, tuple[tuple[int, int], ...]]:
+    """Energy readings on their own endpoint, given to the node's one plug.
+
+    Some plugs report power and energy on a separate Electrical Sensor endpoint. When the
+    node has exactly one plug, those readings are that plug's. On a bridge, or with several
+    plugs, nothing says which plug they measure, so they are left out.
+    """
+    plugs = [(ep, cids) for ep, device_type, cids in supported if device_type == DeviceType.ON_OFF_PLUG]
+    if node.get("is_bridge") or len(plugs) != 1:
+        return {}
+    plug_endpoint, plug_clusters = plugs[0]
+    claimed = {ep for ep, _, _ in supported}
+    source: dict[int, int] = {}  # cluster -> the lowest energy-only endpoint that has it
+    for ep, cids in sorted(clusters_by_endpoint.items()):
+        if ep in claimed or not cids <= ENERGY_CLUSTER_IDS:
+            continue
+        for cid in cids:
+            if cid not in plug_clusters:
+                source.setdefault(cid, ep)
+    pairs = tuple(sorted((ep, cid) for cid, ep in source.items()))
+    return {plug_endpoint: pairs} if pairs else {}

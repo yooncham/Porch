@@ -108,6 +108,100 @@ def test_accepted_command_list_limits_commands():
     assert run(scenario).clusters["OnOff"].commands == ["Off", "On"]
 
 
+# Color bulbs and energy plugs (Tapo L535E and P110M style)
+
+COLOR_BULB, ENERGY_PLUG = "home-1/matter-8-1", "home-1/matter-9-1"
+
+
+def color_bulb(node_id: int = 8, device_type: int = 0x010D) -> dict:
+    """An extended color light: OnOff, LevelControl and ColorControl on endpoint 1."""
+    return node(node_id, {"0/40/1": "TP-Link", "0/40/3": "L535E", "1/29/0": [{"deviceType": device_type}],
+                          "1/6/0": False, "1/6/65529": [0, 1, 2], "1/8/0": 254, "1/768/7": 370})
+
+
+def energy_plug(node_id: int = 9, separate_sensor: bool = False, struct_by_tag: bool = False) -> dict:
+    """An On/Off plug with power (mW) and energy (mWh), on its own endpoint or a separate one."""
+    ep = 2 if separate_sensor else 1
+    energy = {"0": 1_250_000} if struct_by_tag else {"energy": 1_250_000, "startTimestamp": None}
+    attributes = {"0/40/3": "P110M", "1/29/0": [{"deviceType": 266}], "1/6/0": True, "1/6/65529": [0, 1, 2],
+                  f"{ep}/144/8": 42_500, f"{ep}/145/1": energy}
+    if separate_sensor:
+        attributes["2/29/0"] = [{"deviceType": 0x0510}]  # Electrical Sensor
+    return node(node_id, attributes)
+
+
+@pytest.mark.parametrize("device_type", [0x010C, 0x010D])
+def test_color_bulbs_are_on_off_lights(device_type):
+    async def scenario():
+        async with Hub(FakeMatterServer([color_bulb(device_type=device_type)])) as hub:
+            device = (await hub.driver.list_devices())[0]
+            result = await hub.command(device.id, "On", "bulb-on")
+            return device, result
+
+    device, result = run(scenario)
+    assert (device.id, device.name, device.device_type) == (COLOR_BULB, "L535E", "OnOffLight")
+    # Brightness and color are not mapped yet: the bulb is controlled as on/off.
+    assert list(device.clusters) == ["OnOff"]
+    assert device.clusters["OnOff"].commands == ["Off", "On", "Toggle"]
+    assert result.status == "done" and result.state_after["OnOff"].attributes == {"OnOff": True}
+
+
+@pytest.mark.parametrize("separate_sensor", [False, True])
+@pytest.mark.parametrize("struct_by_tag", [False, True])
+def test_energy_plug_reports_power_and_energy(separate_sensor, struct_by_tag):
+    async def scenario():
+        server = FakeMatterServer([energy_plug(separate_sensor=separate_sensor, struct_by_tag=struct_by_tag)])
+        async with Hub(server) as hub:
+            devices = await hub.driver.list_devices()
+            state = await hub.driver.read_state(ENERGY_PLUG)
+            return devices, state
+
+    devices, state = run(scenario)
+    assert [d.id for d in devices] == [ENERGY_PLUG]  # the sensor endpoint is not a device of its own
+    assert devices[0].device_type == "OnOffPlug"
+    assert state["ElectricalPowerMeasurement"].attributes == {"ActivePower": 42_500}
+    assert state["ElectricalPowerMeasurement"].commands == []
+    assert state["ElectricalEnergyMeasurement"].attributes == {"CumulativeEnergyImported": 1_250_000}
+    assert state["OnOff"].attributes == {"OnOff": True}
+
+
+def test_power_reading_from_a_separate_sensor_endpoint_updates_the_plug():
+    async def scenario():
+        server = FakeMatterServer([energy_plug(separate_sensor=True)])
+        async with Hub(server) as hub:
+            await server.set_attribute(9, "2/144/8", 0)
+            event = await hub.next_event("state_changed")
+            return event, hub.registry.get(ENERGY_PLUG)
+
+    event, device = run(scenario)
+    assert event.device_id == ENERGY_PLUG
+    assert device.clusters["ElectricalPowerMeasurement"].attributes == {"ActivePower": 0}
+
+
+def test_energy_endpoint_is_not_guessed_when_a_node_has_two_plugs():
+    two_plugs = node(10, {"1/29/0": [{"deviceType": 266}], "1/6/0": False, "3/29/0": [{"deviceType": 266}],
+                          "3/6/0": False, "2/29/0": [{"deviceType": 0x0510}], "2/144/8": 1000})
+
+    async def scenario():
+        async with Hub(FakeMatterServer([two_plugs])) as hub:
+            return await hub.driver.list_devices()
+
+    devices = run(scenario)
+    assert sorted(d.id for d in devices) == ["home-1/matter-10-1", "home-1/matter-10-3"]
+    assert all("ElectricalPowerMeasurement" not in d.clusters for d in devices)
+
+
+def test_energy_readings_do_not_block_plug_commands():
+    async def scenario():
+        async with Hub(FakeMatterServer([energy_plug()])) as hub:
+            return await hub.command(ENERGY_PLUG, "Off", "plug-off")
+
+    result = run(scenario)
+    assert result.status == "done"
+    assert result.state_after["OnOff"].attributes == {"OnOff": False}
+    assert result.state_after["ElectricalPowerMeasurement"].attributes == {"ActivePower": 42_500}
+
+
 # Commands
 
 def test_lock_and_unlock_are_timed_invokes_confirmed_by_read_back():

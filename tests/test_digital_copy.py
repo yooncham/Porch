@@ -1,12 +1,14 @@
 import asyncio
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 
 from porch_hub import clusters as c
 from porch_hub.digital_copy import DEFAULT_LATENCY_MS
 from porch_hub.drivers import BaseDriver
-from porch_hub.main import Settings, create_app
+from porch_hub.drivers.matter import MatterDriver
+from porch_hub.main import Settings, create_app, default_drivers
 from porch_hub.models import ControlPath
 from porch_hub.seed import demo_home
 
@@ -237,3 +239,26 @@ def test_offline_start_without_a_snapshot_uses_built_in_devices_and_no_driver():
     assert LOCK in devices and devices[LOCK]["online"]
     assert valve["status"] == "done"
     assert Unreachable.calls == 0
+
+
+# Real devices only (PORCH_REAL_DEVICES_ONLY=1)
+
+def test_real_devices_only_leaves_out_every_simulated_platform():
+    real = default_drivers(real_devices_only=True, env={"MATTER_SERVER_URL": "ws://home-node:5580/ws"})
+    demo = default_drivers(real_devices_only=False, env={})
+    assert [type(d) for d in real] == [MatterDriver]
+    assert [d.control_path for d in demo] == [ControlPath.MATTER, ControlPath.LG_THINQ, ControlPath.GOOGLE_HOME]
+
+
+def test_real_devices_only_needs_a_live_platform():
+    with pytest.raises(RuntimeError, match="MATTER_SERVER_URL or LG_THINQ_PAT"):
+        default_drivers(real_devices_only=True, env={})
+
+
+def test_real_devices_only_offline_start_without_a_snapshot_lists_nothing(tmp_path):
+    home = demo_home(simulate_latency=False)  # stand-ins for live drivers; offline mode never calls them
+    settings = Settings(demo_offline_mode=True, real_devices_only=True,
+                        digital_copy_path=tmp_path / "none.json", **FAST)
+    with TestClient(create_app(home.drivers, settings)) as client:
+        devices = client.get("/devices").json()
+    assert devices == []
