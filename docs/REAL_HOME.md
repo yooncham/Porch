@@ -1,7 +1,7 @@
 # Connecting a real home
 
 How to put real devices behind the Porch Device Hub, written for Yoonchan's home first. The same
-steps work for any home with LG ThinQ appliances and Matter devices. Four scripts in
+steps work for any home with LG ThinQ appliances and Matter devices. The scripts in
 `deploy/home/` do the Mac side.
 
 **Contents:** [What connects how](#what-connects-how) · [0. Set up the Mac](#0-set-up-the-mac) ·
@@ -163,12 +163,30 @@ your LG and Matter devices, with none of the simulated demo devices mixed in.
 1. Open http://127.0.0.1:8100/dashboard. Every device should have a green dot.
 2. On the dashboard, turn a bulb on and off. The latency log shows each command confirmed by the
    device.
-3. Read a plug's power: `curl -s http://127.0.0.1:8100/devices/home-1/desk-lamp-plug/state`.
+3. Check the whole path the way an agent uses it, with no AI needed:
+
+   ```bash
+   deploy/home/check.sh                           # reads only: devices, what each agent may do
+   deploy/home/check.sh home-1/living-room-lamp   # also switches that one device and puts it back
+   ```
+
+   With a device id, an agent that may switch the device sends On and Off through the gateway.
+   Each must come back allowed and verified by the device, and the device ends as it started. If
+   no agent may switch it on its own (an unmapped plug), nothing is sent.
+4. Read a plug's power: `curl -s http://127.0.0.1:8100/devices/home-1/desk-lamp-plug/state`.
    `ElectricalPowerMeasurement.ActivePower` is in milliwatts. If the plug has no such cluster, its
    firmware does not report energy over Matter yet.
-4. Connect an agent to the gateway as in `porch_gateway/README.md`, for example Claude Code with
+5. Connect an agent to the gateway as in `porch_gateway/README.md`, for example Claude Code with
    the energy agent's key, and ask it to turn on the living room lamp. The gateway's terminal
    shows the decision, the command and the read-back.
+6. The owner's side is `deploy/home/owner.sh`: `list`, `approve`, `decline`, `home`, `away`. To
+   see an approval with only plugs in the home, add `"unknown_load"` to an agent's `scopes` in
+   `porch_config.json` and restart: that agent's On for an unmapped plug then waits for
+   `deploy/home/owner.sh approve`.
+
+`porch_gateway/check_demo.py` and `owner.py reset`, `leak` and `dry` belong to the simulated demo:
+they send the demo's commands by the demo's device ids, so they refuse to run when the config
+says the hardware is not simulated.
 
 The agent keys in `porch_config.json` are the demo's, fine on this Mac since the gateway listens
 only on 127.0.0.1. Change them before the gateway is reachable from anywhere else.

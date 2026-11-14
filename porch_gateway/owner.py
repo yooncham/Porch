@@ -46,6 +46,11 @@ def set_leak(wet: bool) -> None:
 
 
 cmd = sys.argv[1] if len(sys.argv) > 1 else "list"
+# reset, leak and dry send the demo home's own commands, by the demo's device ids. On a real
+# home they would switch whatever carries those ids, so they run on simulated hardware only.
+if cmd in ("leak", "dry", "reset") and CONFIG.get("hardware") != "simulated":
+    sys.exit(f"'{cmd}' is for the simulated demo home: it sends the demo's commands to devices. "
+             f"This home's config says its hardware is {CONFIG.get('hardware', 'physical')}.")
 if cmd == "list":
     show(httpx.get(f"{PORCH}/owner/approvals", headers=HEADERS))
 elif cmd in ("approve", "decline"):

@@ -15,6 +15,9 @@ from fastmcp import Client
 
 CONFIG = json.load(open(os.path.expanduser(
     os.environ.get("PORCH_GATEWAY_CONFIG") or __file__.replace("check_demo.py", "porch_config.json"))))
+if CONFIG.get("hardware") != "simulated":
+    # The scenes below reset and switch devices by the demo home's ids.
+    sys.exit("check_demo.py plays the simulated demo's scenes. On a real home, run deploy/home/check.sh.")
 MCP_URL = "http://127.0.0.1:8000/mcp"
 HUB = CONFIG["hub_url"]
 OWNER = [sys.executable, __file__.replace("check_demo.py", "owner.py")]
