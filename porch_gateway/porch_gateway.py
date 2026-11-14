@@ -15,6 +15,7 @@ Run:  .venv/bin/python porch_gateway.py
 
 import asyncio
 import json
+import os
 import secrets
 import time
 import uuid
@@ -33,7 +34,9 @@ from starlette.routing import WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 ROOT = Path(__file__).parent
-CONFIG = json.loads((ROOT / "porch_config.json").read_text())
+# PORCH_GATEWAY_CONFIG: a home's own config file, so a real home never edits the demo's copy here.
+CONFIG_PATH = Path(os.environ.get("PORCH_GATEWAY_CONFIG") or ROOT / "porch_config.json").expanduser()
+CONFIG = json.loads(CONFIG_PATH.read_text())
 AUDIT_FILE = ROOT / "audit.jsonl"
 HUB = CONFIG["hub_url"]
 MAX_DELAY_H = CONFIG["limits"]["max_delay_start_hours"]

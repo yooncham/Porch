@@ -290,8 +290,14 @@ then start offline on the day.
 
 ## Real devices
 
+**Connecting a whole real home** (LG appliances, Matter bulbs and plugs paired from the Tapo app
+or Google Home, names and rooms, real devices only, with scripts for a Mac in `deploy/home/`):
+follow [REAL_HOME.md](REAL_HOME.md). This section is the short version.
+
 Without these variables the hub uses simulated devices. Set them in Terminal A before starting
-the hub. Never commit the token.
+the hub. Never commit the token. `PORCH_REAL_DEVICES_ONLY=1` leaves every simulated device out,
+and `.venv/bin/python -m porch_hub.discover` lists what each platform reports, with bindings to
+edit.
 
 ### LG ThinQ
 

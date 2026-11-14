@@ -10,12 +10,14 @@
 """
 
 import json
+import os
 import sys
 import uuid
 
 import httpx
 
-CONFIG = json.load(open(__file__.replace("owner.py", "porch_config.json")))
+CONFIG = json.load(open(os.path.expanduser(
+    os.environ.get("PORCH_GATEWAY_CONFIG") or __file__.replace("owner.py", "porch_config.json"))))
 PORCH = "http://127.0.0.1:8000"
 HUB = CONFIG["hub_url"]
 HEADERS = {"x-owner-key": CONFIG["owner_key"]}

@@ -6,13 +6,15 @@ and every result is checked independently against the hub's device state (not Po
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
 
 import httpx
 from fastmcp import Client
 
-CONFIG = json.load(open(__file__.replace("check_demo.py", "porch_config.json")))
+CONFIG = json.load(open(os.path.expanduser(
+    os.environ.get("PORCH_GATEWAY_CONFIG") or __file__.replace("check_demo.py", "porch_config.json"))))
 MCP_URL = "http://127.0.0.1:8000/mcp"
 HUB = CONFIG["hub_url"]
 OWNER = [sys.executable, __file__.replace("check_demo.py", "owner.py")]

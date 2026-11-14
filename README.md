@@ -12,7 +12,8 @@ Engine ──HTTP──▶ api.py ──▶ CommandRouter ──▶ DeviceRegist
 ```
 
 New here? The [field guide](docs/FIELD_GUIDE.md) explains what each part does and walks
-through running the whole system step by step.
+through running the whole system step by step. To connect a real home's devices, follow
+[docs/REAL_HOME.md](docs/REAL_HOME.md).
 
 **This repo also holds the Porch gateway**, the agent-facing layer that sits in front of this hub.
 - **[`porch_gateway/`](porch_gateway/README.md):** the MCP server agents connect to, with per-agent keys, scopes, safety rules, owner approvals, dry runs, verification and the audit log. It also holds the HW7 benchmark the team submitted, the demo scripts, and how to run the gateway and hub together locally.

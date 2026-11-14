@@ -32,6 +32,8 @@ That runs every demo scene through real MCP calls and checks each result against
 - http://127.0.0.1:8100/stage?engine=ws://127.0.0.1:8000/ws/stage
 - http://127.0.0.1:8100/digital-twin
 
+**A real home** keeps its own copy of the config outside the repo: set `PORCH_GATEWAY_CONFIG` to its path, and the gateway, `owner.py` and `check_demo.py` read that file instead of `porch_config.json`. `deploy/home/start.sh` does this for you; see [`docs/REAL_HOME.md`](../docs/REAL_HOME.md).
+
 ### With a real AI agent (optional, needs your own Anthropic API key)
 
 Any MCP client works. Each agent needs its key in the `Authorization` header; the keys are in `porch_config.json` and are demo values. For Claude Code:
