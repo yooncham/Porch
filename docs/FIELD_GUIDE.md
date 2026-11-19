@@ -6,8 +6,8 @@ bring the whole thing up, from the hub to an AI agent unlocking (or not unlockin
 All commands assume you are in the folder you cloned this repo into:
 
 ```bash
-git clone https://github.com/yooncham/porch-device-hub-yc.git
-cd porch-device-hub-yc
+git clone https://github.com/yooncham/porch.git
+cd porch
 ```
 
 **Contents:** [The big picture](#the-big-picture) · [What we built](#what-we-built) ·
@@ -240,16 +240,16 @@ tools. Then talk to it as in step 6.
 
 Claude Desktop starts engine_lite itself, so skip Terminal B. Keep the hub running in
 Terminal A. In Claude Desktop, open Settings → Developer → Edit Config, and add this to
-`claude_desktop_config.json`, with `/path/to/porch-device-hub-yc` replaced by your clone's full
+`claude_desktop_config.json`, with `/path/to/porch` replaced by your clone's full
 path (`pwd` prints it):
 
 ```json
 {
   "mcpServers": {
     "porch": {
-      "command": "/path/to/porch-device-hub-yc/.venv/bin/python",
+      "command": "/path/to/porch/.venv/bin/python",
       "args": ["-m", "engine_lite", "--stdio", "--agent", "Claude Desktop", "--scope", "energy"],
-      "cwd": "/path/to/porch-device-hub-yc"
+      "cwd": "/path/to/porch"
     }
   }
 }

@@ -6,9 +6,9 @@
 #
 # It exports the commit with `git archive` and copies it to /opt/porch-app with rsync, so the server
 # needs no GitHub access. Then it reruns deploy/setup_droplet.sh and the end-to-end check.
-# Override the server with PORCH_HOST and PORCH_KEY.
+# Set the server with PORCH_HOST (required) and the SSH key with PORCH_KEY.
 set -euo pipefail
-HOST=${PORCH_HOST:-root@<demo-server>}
+HOST=${PORCH_HOST:?set PORCH_HOST to your server, for example root@your-server}
 KEY=${PORCH_KEY:-$HOME/.ssh/porch_ed25519}
 REF=${REF:-origin/main}
 SSH="ssh -o IdentitiesOnly=yes -i $KEY"

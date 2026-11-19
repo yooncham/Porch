@@ -13,7 +13,7 @@
 // makes Porch carry the request out at once; the owner's yes also lets that one command through
 // family protection, once.
 (() => {
-  const REPO = "https://github.com/yooncham/porch-device-hub-yc/blob/main";
+  const REPO = "https://github.com/yooncham/porch/blob/main";
 
   const PAGES = [
     { href: "/", name: "Home", desc: "Every page in one place", use: "Finding your way around" },

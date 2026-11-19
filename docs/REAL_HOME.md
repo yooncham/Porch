@@ -44,8 +44,8 @@ Node.js 22.13 or newer and uv: `brew install node uv` if `node --version` or `uv
 fails. Then, once:
 
 ```bash
-git clone https://github.com/yooncham/porch-device-hub-yc.git ~/Code/porch-device-hub-yc
-cd ~/Code/porch-device-hub-yc
+git clone https://github.com/yooncham/porch.git ~/Code/porch
+cd ~/Code/porch
 deploy/home/setup_mac.sh
 ```
 
@@ -79,7 +79,7 @@ exceeded" after unusual call volumes, so don't restart the hub in a tight loop.
 In its own Terminal tab, and leave it running:
 
 ```bash
-cd ~/Code/porch-device-hub-yc
+cd ~/Code/porch
 deploy/home/matter_server.sh
 ```
 

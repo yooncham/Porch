@@ -87,7 +87,7 @@ designing a change; `fresh` cases are kept back to check it.
 ## How to repeat
 
 ```bash
-git clone https://github.com/yooncham/porch-device-hub-yc.git && cd porch-device-hub-yc
+git clone https://github.com/yooncham/porch.git && cd porch
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev,engine]"
 .venv/bin/python -m bench run --trials 3 --name my-run
 ```

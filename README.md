@@ -1,5 +1,9 @@
 # Porch Device Hub
 
+> Public copy of Team Porch's code for MIT AI Studio (Fall 2026), made for HW9 from the team's
+> private repository at commit `6cb3b9e`. The demo server's address is left out; set
+> `PORCH_HOST` to deploy to your own server.
+
 The execution bridge between the Porch Engine and home device platforms (Interface v0).
 The Engine is the only caller. Every device is described with Matter names, whichever
 platform it lives on.
