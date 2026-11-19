@@ -1,0 +1,202 @@
+{
+  "at": "2026-11-16T18:09:48+00:00",
+  "devices": {
+    "home-1/front-door-lock": {
+      "name": "Front door",
+      "room": "Entry",
+      "type": "DoorLock",
+      "clusters": {
+        "DoorLock": {
+          "attributes": {
+            "LockState": "Locked"
+          },
+          "commands": [
+            "LockDoor",
+            "UnlockDoor"
+          ]
+        }
+      }
+    },
+    "home-1/kitchen-leak-sensor": {
+      "name": "Kitchen leak sensor",
+      "room": "Kitchen",
+      "type": "WaterLeakSensor",
+      "clusters": {
+        "BooleanState": {
+          "attributes": {
+            "StateValue": false
+          },
+          "commands": []
+        }
+      }
+    },
+    "home-1/main-water-valve": {
+      "name": "Main water valve",
+      "room": "Utility",
+      "type": "WaterValve",
+      "clusters": {
+        "ValveConfigurationAndControl": {
+          "attributes": {
+            "CurrentState": "Open"
+          },
+          "commands": [
+            "Open",
+            "Close"
+          ]
+        }
+      }
+    },
+    "home-1/desk-lamp-plug": {
+      "name": "Desk lamp",
+      "room": "Office",
+      "type": "OnOffPlug",
+      "clusters": {
+        "OnOff": {
+          "attributes": {
+            "OnOff": true
+          },
+          "commands": [
+            "On",
+            "Off",
+            "Toggle"
+          ]
+        }
+      }
+    },
+    "home-1/laundry-dryer": {
+      "name": "Dryer",
+      "room": "Laundry",
+      "type": "LaundryDryer",
+      "clusters": {
+        "OperationalState": {
+          "attributes": {
+            "OperationalState": "Stopped"
+          },
+          "commands": [
+            "Start",
+            "Stop"
+          ]
+        },
+        "PorchLaundryExtension": {
+          "attributes": {
+            "RemoteStartAllowed": true,
+            "RelativeHourToStart": 10,
+            "RelativeMinuteToStart": 0,
+            "VendorRunState": "POWER_OFF"
+          },
+          "commands": [
+            "SetDelayStart"
+          ]
+        }
+      }
+    },
+    "home-1/robot-vacuum": {
+      "name": "Robot vacuum",
+      "room": "Living room",
+      "type": "RoboticVacuumCleaner",
+      "clusters": {
+        "RvcOperationalState": {
+          "attributes": {
+            "OperationalState": "Charging"
+          },
+          "commands": [
+            "Start",
+            "Pause",
+            "GoHome"
+          ]
+        },
+        "PowerSource": {
+          "attributes": {
+            "BatPercentRemaining": 200
+          },
+          "commands": []
+        }
+      }
+    },
+    "home-1/air-purifier": {
+      "name": "Air purifier",
+      "room": "Bedroom",
+      "type": "AirPurifier",
+      "clusters": {
+        "OnOff": {
+          "attributes": {
+            "OnOff": false
+          },
+          "commands": [
+            "On",
+            "Off"
+          ]
+        },
+        "AirQuality": {
+          "attributes": {
+            "AirQuality": "Good"
+          },
+          "commands": []
+        },
+        "FanControl": {
+          "attributes": {
+            "FanMode": "Auto"
+          },
+          "commands": []
+        },
+        "Pm25ConcentrationMeasurement": {
+          "attributes": {
+            "MeasuredValue": 8
+          },
+          "commands": []
+        },
+        "Pm1ConcentrationMeasurement": {
+          "attributes": {
+            "MeasuredValue": 6
+          },
+          "commands": []
+        },
+        "Pm10ConcentrationMeasurement": {
+          "attributes": {
+            "MeasuredValue": 11
+          },
+          "commands": []
+        },
+        "HepaFilterMonitoring": {
+          "attributes": {
+            "Condition": 87
+          },
+          "commands": []
+        }
+      }
+    },
+    "home-1/space-heater-plug": {
+      "name": "Space heater",
+      "room": "Living room",
+      "type": "OnOffPlug",
+      "clusters": {
+        "OnOff": {
+          "attributes": {
+            "OnOff": false
+          },
+          "commands": [
+            "On",
+            "Off",
+            "Toggle"
+          ]
+        }
+      }
+    }
+  },
+  "people": [
+    {
+      "id": "yoonchan",
+      "name": "Yoonchan",
+      "where": "unknown",
+      "room": null,
+      "room_name": null
+    },
+    {
+      "id": "wife",
+      "name": "Wife",
+      "where": "unknown",
+      "room": null,
+      "room_name": null
+    }
+  ]
+}

@@ -32,8 +32,9 @@ from collections.abc import Iterable
 from .models import Clusters, ControlPath, Device
 
 # Local Matter first: lowest latency, and it works without the internet.
-# LG's cloud comes before Google's because it is LG's own, fuller API.
-PATH_PRIORITY: tuple[ControlPath, ...] = (ControlPath.MATTER, ControlPath.LG_THINQ, ControlPath.GOOGLE_HOME)
+# LG's cloud comes before Google's because it is LG's own, fuller API. Ring only reads.
+PATH_PRIORITY: tuple[ControlPath, ...] = (ControlPath.MATTER, ControlPath.LG_THINQ, ControlPath.GOOGLE_HOME,
+                                          ControlPath.RING)
 
 _UNKNOWN_ROOMS = frozenset({"", "unassigned", "unknown", "none"})
 _PLACEHOLDER_SERIALS = frozenset({"", "0", "NA", "NONE", "UNKNOWN", "TESTSN", "SERIALNUMBER"})
@@ -162,8 +163,12 @@ def combine(group: list[Device]) -> Device:
     # Local Matter by default; a cloud path takes over only while every better path is down.
     primary = (reachable or group)[0]
 
+    # What the device reports comes from the paths that reach it now. A path that is down keeps
+    # only what it last heard, and that must not be passed on as current: a plug whose Matter
+    # link is down shows its switch, from the cloud, and no watts. When no path reaches the
+    # device, the last known state is kept and the device is shown as offline.
     clusters: Clusters = {}
-    for record in [primary, *(r for r in group if r is not primary)]:
+    for record in [primary, *(r for r in (reachable or group) if r is not primary)]:
         for name, cluster in record.clusters.items():
             clusters.setdefault(name, cluster.model_copy(deep=True))
 

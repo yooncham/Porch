@@ -1,0 +1,41 @@
+{
+  "name": "rehearsal-realhome-mechanics",
+  "home": "real",
+  "started": "2026-11-16T18:24:20+00:00",
+  "hub": "http://127.0.0.1:8102",
+  "gateway": "http://127.0.0.1:8002/mcp",
+  "agent": {
+    "id": "fresh-agent",
+    "name": "Fresh agent",
+    "acts_for": "Yoonchan",
+    "scopes": [
+      "lighting",
+      "appliance"
+    ]
+  },
+  "may_move": {
+    "home-1/living-stand": "Living stand",
+    "home-1/air-purifier": "Airpuri"
+  },
+  "window": {
+    "enforced": false,
+    "live_writes_enabled": true,
+    "device_ids": [],
+    "commands": [],
+    "expires_at": null,
+    "always_allowed": {
+      "device_ids": [],
+      "commands": []
+    }
+  },
+  "client": "a scripted client against the stand-in, through realhome.py's recorder: a rehearsal of the real-home harness, not an agent and not the real home",
+  "documentation": {
+    "file": "docs/AGENTS.md",
+    "sha256_12": "71af9dcc519a"
+  },
+  "task": {
+    "file": "usability/task_home.md",
+    "sha256_12": "2218ac12f875"
+  },
+  "stopped": "2026-11-16T18:24:41+00:00"
+}

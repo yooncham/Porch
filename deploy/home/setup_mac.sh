@@ -26,14 +26,14 @@ say "Found Node.js $NODE_VERSION and uv."
 
 cd "$REPO"
 [ -x .venv/bin/python ] || uv venv -q --python 3.12 .venv
-uv pip install -q --python .venv/bin/python -e ".[lg]"
+uv pip install -q --python .venv/bin/python -e ".[lg,google,ring]"
 say "Hub environment ready."
 [ -x porch_gateway/.venv/bin/python ] || (cd porch_gateway && uv venv -q --python 3.12 .venv)
 uv pip install -q --python porch_gateway/.venv/bin/python -r porch_gateway/requirements.txt
 say "Gateway environment ready."
 
-mkdir -p "$CONF/matter"
-chmod 700 "$CONF"
+mkdir -p "$CONF/matter" "$CONF/google-home"
+chmod 700 "$CONF" "$CONF/google-home"
 if [ -f "$CONF/home.env" ]; then
   say "Kept your $CONF/home.env."
 else
@@ -64,3 +64,7 @@ say "Next:"
 say "  1. Put your LG token in $CONF/home.env (the line LG_THINQ_PAT=)."
 say "  2. In a new Terminal tab: deploy/home/matter_server.sh"
 say "  3. Pair the Tapo devices, then: deploy/home/discover.sh"
+say "  Optional: Google Home and a Ring doorbell, with deploy/home/connect.sh (docs/REAL_HOME.md)."
+say "  Real devices take commands only inside a control window you open: set your owner PIN once with"
+say "  deploy/home/owner.sh set-pin, then use the Family protection button at the top of any hub page"
+say "  (or deploy/home/owner.sh allow --device <id>)."

@@ -173,6 +173,31 @@ def robot_cleaner_payload(command: str, _params: dict[str, Any]) -> Payload:
     return {"operation": {"cleanOperationMode": modes[command]}}
 
 
+# Stick vacuums (LG CordZero). LG reports where the vacuum is and what it is doing, and offers
+# no remote control at all: every property in its profile is read only.
+
+_STICK_STATES = {"STANDBY": "Stopped", "WORKING": "Running", "CHARGING": "Charging", "CHARGING_COMPLETE": "Docked"}
+_STICK_MODES = {"OFF": "Off", "NORMAL": "Normal", "HIGH": "High", "TURBO": "Turbo", "MOP": "Mop", "AUTO": "Auto"}
+# LG's four battery levels on Matter's three: only LOW and WARNING ask for attention.
+_BATTERY_LEVELS = {"HIGH": "OK", "MID": "OK", "LOW": "Warning", "WARNING": "Critical"}
+
+
+def stick_cleaner_clusters(status: Status) -> Clusters:
+    clusters = {c.RVC_OPERATIONAL_STATE: c.rvc_operational_state(
+        _STICK_STATES.get(_run_state(status), UNKNOWN), commands=())}
+    if (mode := status.get("stickCleanerJobMode", {}).get("currentJobMode")) is not None:
+        clusters[c.RVC_CLEAN_MODE] = c.rvc_clean_mode(_STICK_MODES.get(mode, UNKNOWN))
+    battery = status.get("battery", {})
+    percent, level = battery.get("percent"), _BATTERY_LEVELS.get(battery.get("level"))
+    if percent is not None or level is not None:
+        clusters[c.POWER_SOURCE] = c.power_source(percent, level)
+    return clusters
+
+
+def stick_cleaner_payload(command: str, _params: dict[str, Any]) -> Payload:
+    raise CommandRejected(f"LG offers no remote control for stick vacuums, so {command} cannot be sent")
+
+
 # Air purifiers
 
 _FAN_MODES = {"SLOW": "Low", "LOW": "Low", "MID": "Medium", "HIGH": "High", "POWER": "High", "AUTO": "Auto"}
@@ -180,7 +205,8 @@ _AIR_QUALITY = {"GOOD": "Good", "NORMAL": "Fair", "BAD": "Poor", "VERY_BAD": "Ve
 
 
 def air_purifier_clusters(status: Status) -> Clusters:
-    on = status.get("operation", {}).get("airPurifierOperationMode") == "POWER_ON"
+    # None when LG does not say: an unknown power state is never passed on as off.
+    on = {"POWER_ON": True, "POWER_OFF": False}.get(status.get("operation", {}).get("airPurifierOperationMode"))
     sensor = status.get("airQualitySensor", {})
     air_flow = status.get("airFlow", {})
     wind = air_flow.get("windStrengthDetail") or air_flow.get("windStrength")
@@ -192,7 +218,17 @@ def air_purifier_clusters(status: Status) -> Clusters:
         clusters[c.FAN_CONTROL] = c.fan_control(_FAN_MODES.get(wind, "On"))
     if (pm2 := sensor.get("PM2")) is not None:
         clusters[c.PM25] = c.pm25(pm2)
+    # The other readings a purifier may give. Each is listed only when LG reports a number.
+    for lg_name, cluster in (("PM1", c.PM1), ("PM10", c.PM10)):
+        if _is_number(value := sensor.get(lg_name)):
+            clusters[cluster] = c.particles(value)
+    if _is_number(left := status.get("filterInfo", {}).get("filterRemainPercent")):
+        clusters[c.HEPA_FILTER_MONITORING] = c.hepa_filter(left)
     return clusters
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def air_purifier_payload(command: str, _params: dict[str, Any]) -> Payload:
@@ -211,6 +247,8 @@ PROFILES: dict[str, ThinQProfile] = {
                                   requires_remote_switch=True),
     "DEVICE_ROBOT_CLEANER": ThinQProfile(DeviceType.ROBOTIC_VACUUM_CLEANER, robot_cleaner_clusters,
                                          robot_cleaner_payload),
+    "DEVICE_STICK_CLEANER": ThinQProfile(DeviceType.STICK_VACUUM, stick_cleaner_clusters,
+                                         stick_cleaner_payload),
     "DEVICE_AIR_PURIFIER": ThinQProfile(DeviceType.AIR_PURIFIER, air_purifier_clusters,
                                         air_purifier_payload),
 }

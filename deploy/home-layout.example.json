@@ -1,0 +1,245 @@
+{
+  "name": "Townhome",
+  "floors": [
+    {
+      "id": "first",
+      "name": "First floor",
+      "width": 20,
+      "depth": 37,
+      "rooms": [
+        {
+          "id": "living",
+          "name": "Living / Dining",
+          "x": 0,
+          "y": 0,
+          "w": 14,
+          "d": 23,
+          "matches": [
+            "Living Room",
+            "Living room"
+          ]
+        },
+        {
+          "id": "kitchen",
+          "name": "Kitchen",
+          "x": 0,
+          "y": 23,
+          "w": 14,
+          "d": 14,
+          "kind": "kitchen"
+        },
+        {
+          "id": "coat-closet",
+          "name": "Coats",
+          "x": 14,
+          "y": 0,
+          "w": 6,
+          "d": 3,
+          "kind": "store"
+        },
+        {
+          "id": "storage",
+          "name": "Storage",
+          "x": 14,
+          "y": 15,
+          "w": 6,
+          "d": 3,
+          "kind": "store"
+        },
+        {
+          "id": "half-bath",
+          "name": "Half bath",
+          "x": 14,
+          "y": 18,
+          "w": 6,
+          "d": 6.5,
+          "kind": "bath"
+        },
+        {
+          "id": "closet-1",
+          "name": "Closet",
+          "x": 14,
+          "y": 24.5,
+          "w": 6,
+          "d": 3.5,
+          "kind": "store"
+        },
+        {
+          "id": "utility",
+          "name": "Utility",
+          "x": 14,
+          "y": 28,
+          "w": 6,
+          "d": 9,
+          "kind": "store",
+          "matches": [
+            "Laundry",
+            "Utility Room"
+          ]
+        }
+      ],
+      "fixtures": [
+        {
+          "kind": "stairs",
+          "x": 14,
+          "y": 3,
+          "w": 6,
+          "d": 12
+        },
+        {
+          "kind": "door",
+          "x": 9.5,
+          "y": 0,
+          "w": 3.5,
+          "label": "Front door"
+        },
+        {
+          "kind": "label",
+          "x": 11.2,
+          "y": 2.4,
+          "label": "Entry"
+        },
+        {
+          "kind": "counter",
+          "x": 1,
+          "y": 24.5,
+          "w": 9,
+          "d": 3,
+          "label": "Island"
+        },
+        {
+          "kind": "counter",
+          "x": 0.5,
+          "y": 35,
+          "w": 13,
+          "d": 1.6
+        },
+        {
+          "kind": "label",
+          "x": 17,
+          "y": 34.5,
+          "label": "W/D"
+        }
+      ]
+    },
+    {
+      "id": "second",
+      "name": "Second floor",
+      "width": 20,
+      "depth": 37,
+      "rooms": [
+        {
+          "id": "bedroom-1",
+          "name": "Bedroom 1",
+          "x": 0,
+          "y": 0,
+          "w": 13.75,
+          "d": 11.5,
+          "matches": [
+            "Bedroom"
+          ]
+        },
+        {
+          "id": "hall",
+          "name": "Hall",
+          "x": 10.5,
+          "y": 11.5,
+          "w": 5.5,
+          "d": 14,
+          "kind": "hall"
+        },
+        {
+          "id": "bath-top",
+          "name": "Bath",
+          "x": 13.75,
+          "y": 0,
+          "w": 6.25,
+          "d": 8,
+          "kind": "bath"
+        },
+        {
+          "id": "closet-2",
+          "name": "Closet",
+          "x": 13.75,
+          "y": 8,
+          "w": 2.25,
+          "d": 6,
+          "kind": "store"
+        },
+        {
+          "id": "linen",
+          "name": "Linen",
+          "x": 13.75,
+          "y": 14,
+          "w": 2.25,
+          "d": 2,
+          "kind": "store"
+        },
+        {
+          "id": "bedroom-2",
+          "name": "Bedroom 2",
+          "x": 0,
+          "y": 11.5,
+          "w": 10.5,
+          "d": 11
+        },
+        {
+          "id": "closets-3",
+          "name": "Closets",
+          "x": 0,
+          "y": 22.5,
+          "w": 10.5,
+          "d": 3,
+          "kind": "store"
+        },
+        {
+          "id": "bedroom-3",
+          "name": "Bedroom 3",
+          "x": 0,
+          "y": 25.5,
+          "w": 13,
+          "d": 11.5
+        },
+        {
+          "id": "bath-bottom",
+          "name": "Bath",
+          "x": 13,
+          "y": 23,
+          "w": 7,
+          "d": 14,
+          "kind": "bath"
+        }
+      ],
+      "fixtures": [
+        {
+          "kind": "stairs",
+          "x": 16,
+          "y": 8,
+          "w": 4,
+          "d": 15
+        }
+      ]
+    }
+  ],
+  "placements": {
+    "home-1/living-room-lamp": {
+      "room": "living",
+      "x": 0.14,
+      "y": 0.12
+    },
+    "home-1/air-purifier": {
+      "room": "living",
+      "x": 0.28,
+      "y": 0.9
+    }
+  },
+  "extras": [
+    {
+      "name": "Dishwasher",
+      "room": "kitchen",
+      "x": 0.55,
+      "y": 0.93,
+      "note": "In the LG account; the hub has no mapping for it yet"
+    }
+  ]
+}

@@ -23,6 +23,7 @@ from .digital_copy import DigitalCopy
 from .drivers import BaseDriver, CommandRejected, DeviceNotFound, DeviceOffline, DriverError
 from .idempotency import IdempotencyStore, fingerprint
 from .models import Clusters, CommandRequest, CommandResponse, ControlPath, Device
+from .protection import FamilyProtection
 from .registry import DeviceRegistry, Route
 
 log = logging.getLogger(__name__)
@@ -39,8 +40,10 @@ def _join(*errors: str | None) -> str | None:
 class CommandRouter:
     def __init__(self, registry: DeviceRegistry, idempotency: IdempotencyStore,
                  confirm_timeout_s: float = 5.0, poll_interval_s: float = 0.2,
-                 digital_copy: DigitalCopy | None = None, driver_timeout_s: float = 10.0) -> None:
+                 digital_copy: DigitalCopy | None = None, driver_timeout_s: float = 10.0,
+                 protection: FamilyProtection | None = None) -> None:
         self._registry = registry
+        self._protection = protection
         self._driver_timeout_s = driver_timeout_s
         self._digital_copy = digital_copy
         self._idempotency = idempotency
@@ -89,6 +92,10 @@ class CommandRouter:
         spec = commands.resolve(device, request.command)
         params = spec.parse_params(request.params)
         copy = self._digital_copy
+        if self._protection is not None and not (copy is not None and copy.offline):
+            # Family protection, before any device is contacted. It raises, so nothing is cached
+            # under the key and the same request can run once the owner opens a window.
+            self._protection.check(device.id, spec.name)
 
         # One command at a time per device, so read-backs never interleave.
         async with self._device_locks[device_id]:
@@ -115,7 +122,7 @@ class CommandRouter:
         routes = [r for r in self._registry.routes(device.id) if commands.supports(r.record, spec)]
         for i, route in enumerate(routes):
             try:
-                state, error = await self._run_on(route, spec, params)
+                state, error = await self._run_on(device.id, route, spec, params)
             except _NotDelivered as exc:
                 unreachable.append(f"{route.path}: {exc}")
                 log.warning("%s unreachable via %s: %s", device.id, route.path, exc)
@@ -130,7 +137,8 @@ class CommandRouter:
         return self._response(device, None, spec, key, started, device.clusters,
                               unreachable or [f"no path to {device.id} supports {spec.name}"])
 
-    async def _run_on(self, route: Route, spec: CommandSpec, params: BaseModel) -> tuple[Clusters, str | None]:
+    async def _run_on(self, device_id: str, route: Route, spec: CommandSpec,
+                      params: BaseModel) -> tuple[Clusters, str | None]:
         """Run the command on one path. Raises _NotDelivered when the path failed before the device got it.
 
         Once a send has been attempted, the state is always read back: an
@@ -139,7 +147,7 @@ class CommandRouter:
         """
         driver = route.driver
         try:
-            before = await self._bounded(driver.read_state(route.device_id), "read")
+            before = await self._bounded(driver, driver.read_state(route.device_id), "read")
         except DriverError as exc:
             raise _NotDelivered(str(exc)) from exc  # nothing was sent yet
         try:
@@ -147,13 +155,19 @@ class CommandRouter:
         except commands.CannotPredict as exc:
             return self._record(route, before), str(exc)  # not sent: its outcome could not be checked
 
+        if self._protection is not None:
+            # Checked again right before sending: the read above can take seconds on a cloud
+            # path, and the owner's window may have closed meanwhile.
+            self._protection.check(device_id, spec.name)
         send_error: str | None = None
         try:
-            await self._bounded(driver.send_command(route.device_id, spec.name, params.model_dump()), spec.name)
+            await self._bounded(driver, driver.send_command(route.device_id, spec.name, params.model_dump()),
+                                spec.name)
         except DeviceOffline as exc:
             raise _NotDelivered(str(exc)) from exc  # the platform could not reach the device
         except CommandRejected as exc:
             # Refused: nothing changes, so one fresh read is enough, with no waiting.
+            self._spend(device_id, spec.name)
             state, read_error = await self._read_once(driver, route.device_id)
             return self._record(route, state), _join(str(exc), read_error)
         except DriverError as exc:
@@ -161,6 +175,7 @@ class CommandRouter:
             # state decides. Another path must not repeat the command either way.
             send_error = str(exc)
             log.warning("%s on %s: %s; reading back to see whether it acted", spec.name, route.device_id, exc)
+        self._spend(device_id, spec.name)  # sent, or maybe sent: a pass from the owner's yes is used up
 
         state, confirmed, read_error = await self._read_back(driver, route.device_id, spec, expected)
         if confirmed:
@@ -169,6 +184,10 @@ class CommandRouter:
                    f"within {self._timeout_for(driver):g}s of {spec.name}")
         return self._record(route, state), _join(send_error or timeout, read_error)
 
+    def _spend(self, device_id: str, command: str) -> None:
+        if self._protection is not None:
+            self._protection.spend(device_id, command)
+
     def _record(self, route: Route, state: Clusters) -> Clusters:
         if state:
             self._registry.record_path_state(route.path, route.device_id, state, fresh=True)
@@ -176,16 +195,17 @@ class CommandRouter:
 
     async def _read_once(self, driver: BaseDriver, device_id: str) -> tuple[Clusters, str | None]:
         try:
-            return await self._bounded(driver.read_state(device_id), "read"), None
+            return await self._bounded(driver, driver.read_state(device_id), "read"), None
         except DriverError as exc:
             return {}, f"state read-back failed: {exc}"
 
-    async def _bounded(self, call: Any, what: str) -> Any:
-        """A driver call that gives up after driver_timeout_s. A timed-out send's outcome is unknown."""
+    async def _bounded(self, driver: BaseDriver, call: Any, what: str) -> Any:
+        """A driver call that gives up after the driver's timeout. A timed-out send's outcome is unknown."""
+        timeout_s = driver.call_timeout_s if driver.call_timeout_s is not None else self._driver_timeout_s
         try:
-            return await asyncio.wait_for(call, self._driver_timeout_s)
+            return await asyncio.wait_for(call, timeout_s)
         except TimeoutError:
-            raise DriverError(f"{what} did not answer within {self._driver_timeout_s:g}s") from None
+            raise DriverError(f"{what} did not answer within {timeout_s:g}s") from None
 
     def _response(self, device: Device, path: ControlPath | None, spec: CommandSpec, key: str, started: float,
                   state: Clusters, errors: list[str] | None, fallback: bool = False) -> CommandResponse:

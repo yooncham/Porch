@@ -170,10 +170,12 @@ class DeviceRegistry:
             return None, {name: c.model_copy(deep=True) for name, c in self.get(device_id).clusters.items()}
         offline: list[str] = []
         for route in self.routes(device_id):
+            own = route.driver.call_timeout_s
+            timeout_s = own if own is not None else self.driver_timeout_s
             try:
-                clusters = await asyncio.wait_for(route.driver.read_state(route.device_id), self.driver_timeout_s)
+                clusters = await asyncio.wait_for(route.driver.read_state(route.device_id), timeout_s)
             except TimeoutError:
-                offline.append(f"{route.path}: read did not answer within {self.driver_timeout_s:g}s")
+                offline.append(f"{route.path}: read did not answer within {timeout_s:g}s")
                 continue
             except DeviceOffline as exc:
                 offline.append(f"{route.path}: {exc}")

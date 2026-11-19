@@ -120,6 +120,9 @@ class FaultyDriver(BaseDriver):
             case "reject":
                 raise CommandRejected(f"{command} refused by the platform (injected fault)")
 
+    async def details(self, device_id: str) -> list[dict[str, str]]:
+        return await self.inner.details(device_id)
+
     def preflight(self, device_id: str, command: str, params: dict[str, Any], clusters: Clusters) -> None:
         self.inner.preflight(device_id, command, params, clusters)
 

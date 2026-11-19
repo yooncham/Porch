@@ -89,6 +89,8 @@ _SPECS = [
     CommandSpec("Pause", c.RVC_OPERATIONAL_STATE, _sets(OperationalState="Paused")),
     CommandSpec("GoHome", c.RVC_OPERATIONAL_STATE,
                 _sets(OperationalState=OneOf(("SeekingCharger", "Charging", "Docked")))),
+    CommandSpec("Play", c.MEDIA_PLAYBACK, _sets(CurrentState="Playing")),
+    CommandSpec("Pause", c.MEDIA_PLAYBACK, _sets(CurrentState="Paused")),
     CommandSpec(
         "SetDelayStart",
         c.PORCH_LAUNDRY,

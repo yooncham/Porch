@@ -1,0 +1,13 @@
+[11/16/26 11:33:21] Error calling tool 'request_action'                         
+[2m[PORCH READ    ] fresh-agent      describe_home  | 8 devices, with what this agent may do[0m
+[31m[PORCH DENY    ][0m fresh-agent           SetLevel home-1/desk-lamp-plug      | Desk lamp does not support 'SetLevel'. Supported: Off, On, Toggle.
+                            agent said: "not too bright"
+2026-11-16 11:33:23,039 INFO porch_hub.router: done On on home-1/desk-lamp-plug via matter in 64 ms
+[32m[PORCH ALLOW   ][0m fresh-agent                 On home-1/desk-lamp-plug      | Low-risk device within the agent's scope.  verified=True  {'OnOff.OnOff': False} -> {'OnOff.OnOff': True}  (64 ms via matter)
+                            agent said: "light"
+[31m[PORCH DENY    ][0m fresh-agent                 On home-1/space-heater-plug   | Safety rule: no heating devices run when nobody is home.
+                            agent said: "warm"
+[31m[PORCH DENY    ][0m fresh-agent                 On home-1/space-heater-plug   | Safety rule: no heating devices run when nobody is home.
+                            agent said: "warm, again"
+[31m[PORCH DENY    ][0m fresh-agent      SetDelayStart home-1/laundry-dryer       | Household limit: delays can be at most 12 hours.
+                            agent said: "finish by morning"

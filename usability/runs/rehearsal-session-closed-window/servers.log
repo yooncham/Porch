@@ -1,0 +1,13 @@
+[2m[PORCH READ    ] fresh-agent      describe_home  | 8 devices, with what this agent may do[0m
+2026-11-16 13:09:44,759 INFO porch_hub.router: done On on home-1/desk-lamp-plug via matter in 64 ms
+[32m[PORCH ALLOW   ][0m fresh-agent                 On home-1/desk-lamp-plug      | Low-risk device within the agent's scope.  verified=True  {'OnOff.OnOff': False} -> {'OnOff.OnOff': True}  (64 ms via matter)
+                            agent said: "Office light"
+[31m[PORCH DENY    ][0m fresh-agent                 On home-1/space-heater-plug   | Safety rule: no heating devices run when nobody is home.
+                            agent said: "Warm the living room"
+2026-11-16 13:09:45,959 INFO porch_hub.router: done LockDoor on home-1/front-door-lock via matter in 64 ms
+[32m[PORCH ALLOW   ][0m fresh-agent           LockDoor home-1/front-door-lock     | This moves the device to its safe state, which is always allowed.  verified=True  {'DoorLock.LockState': 'Locked'} -> {'DoorLock.LockState': 'Locked'}  (64 ms via matter)
+                            agent said: "Make sure it is locked"
+2026-11-16 13:09:46,851 INFO porch_hub.drivers.thinq.driver: LG accepted SetDelayStart for home-1/laundry-dryer in 151 ms
+2026-11-16 13:09:47,705 INFO porch_hub.router: done SetDelayStart on home-1/laundry-dryer via lg_thinq in 1157 ms
+[32m[PORCH ALLOW   ][0m fresh-agent      SetDelayStart home-1/laundry-dryer       | Appliance action within household limits.  verified=True  {'PorchLaundryExtension.RelativeHourToStart': 0} -> {'PorchLaundryExtension.RelativeHourToStart': 10}  (1157 ms via lg_thinq)
+                            agent said: "Run overnight at off-peak rates"

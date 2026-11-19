@@ -49,6 +49,7 @@ h2 { margin: 36px 0 12px; font-size: 12px; letter-spacing: .12em; text-transform
 .steps { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }
 .steps li { padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--muted); font-size: 14px; }
 .steps b { display: block; color: var(--ink); margin-bottom: 2px; }
+.steps strong { color: var(--ink); }
 .steps a { color: var(--accent); text-decoration: none; }
 .steps a:hover { text-decoration: underline; }
 
@@ -75,8 +76,8 @@ h2 { margin: 36px 0 12px; font-size: 12px; letter-spacing: .12em; text-transform
 
 <main>
   <h1>Porch Device Hub</h1>
-  <p class="lede">The device layer between AI agents and a real home: one interface for Matter, LG ThinQ and
-    Google Home devices, with every command read back from the device. Each page below shows the same live hub.
+  <p class="lede">The device layer between AI agents and a real home: one interface for Matter, LG ThinQ,
+    Google Home and Ring devices, with every command read back from the device. Each page below shows the same live hub.
     The <b>Pages</b> button at the top of every page brings you back here.</p>
 
   <h2>Pages</h2>
@@ -87,6 +88,8 @@ h2 { margin: 36px 0 12px; font-size: 12px; letter-spacing: .12em; text-transform
     <li><b>1. Big screen</b>Open <a href="/stage">Stage</a> on the projector. It shows agents, safety alerts and the audit trail.</li>
     <li><b>2. Your laptop</b>Open the <a href="/home-3d">3D home</a> or the <a href="/digital-twin">digital twin</a> to show where each device is.</li>
     <li><b>3. Drive it</b>Send commands from the <a href="/dashboard">dashboard</a>, or let an agent act through the engine.</li>
+    <li id="protection-step" hidden><b>Family at home?</b>Real devices take no command until the owner opens a control window:
+      the <strong>Family protection</strong> button at the top of every page, with the owner PIN. It closes by itself.</li>
     <li><b>Wi-Fi drops?</b>Switch on offline mode on the dashboard. Every page keeps working from the digital copy.</li>
   </ol>
 
@@ -131,19 +134,22 @@ function live(href, text) {
 
 async function refresh() {
   try {
-    const [devicesRes, modeRes] = await Promise.all([fetch("/devices"), fetch("/demo/offline-mode")]);
+    const [devicesRes, modeRes, layoutRes] = await Promise.all([fetch("/devices"), fetch("/demo/offline-mode"), fetch("/home/layout")]);
     if (!devicesRes.ok) throw new Error(devicesRes.status);
     const devices = await devicesRes.json();
     const offline = modeRes.ok ? (await modeRes.json()).enabled : false;
+    const layout = layoutRes.ok ? await layoutRes.json() : { name: "Home", floors: [] };
     const online = devices.filter((d) => d.online).length;
     const platforms = new Set(devices.flatMap((d) => d.control_paths)).size;
-    const rooms = new Set(devices.map((d) => d.room).filter(Boolean)).size;
+    const floors = layout.floors.length;
+    const rooms = layout.floors.reduce((sum, floor) => sum + floor.rooms.length, 0);
+    const plan = `${layout.name} · ${floors} floor${floors === 1 ? "" : "s"} · ${rooms} rooms`;
     pill("hub", "ok", "Hub connected");
     pill("devices", online === devices.length ? "ok" : "warn", `${online}/${devices.length} devices online`);
     pill("mode", offline ? "warn" : "ok", offline ? "Offline backup" : "Live hardware");
     live("/dashboard", `${devices.length} devices · ${platforms} platforms`);
-    live("/digital-twin", offline ? "Showing the digital copy" : "Hardware and digital copy in step");
-    live("/home-3d", `${rooms} rooms · ${devices.length} devices placed`);
+    live("/digital-twin", offline ? `${plan} · digital copy` : plan);
+    live("/home-3d", `${plan} · ${devices.length} devices`);
     live("/stage", "Connects to the engine for agent activity");
     live("/docs", "GET /devices · POST /commands · /ws/events");
   } catch {
@@ -154,6 +160,12 @@ async function refresh() {
 }
 refresh();
 setInterval(refresh, 5000);
+
+// The menu script reports family protection (GET /protection). The step that explains the
+// button shows only on a hub that enforces it.
+document.addEventListener("porch:protection", (event) => {
+  document.getElementById("protection-step").hidden = !(event.detail && event.detail.enforced);
+});
 </script>
 </body>
 </html>

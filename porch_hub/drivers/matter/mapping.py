@@ -51,6 +51,9 @@ class ClusterMap:
     commands: dict[str, int] = field(default_factory=dict)  # Porch/Matter command name -> command id
     timed_commands: frozenset[str] = frozenset()  # the spec requires these as timed invokes
     events: dict[int, str] = field(default_factory=dict)
+    # Readings a device may or may not have. They are read and listed only for a device that
+    # reports them, so a device without them is not shown an empty value and is not asked for it.
+    optional: dict[int, tuple[str, Callable[[Any], Any]]] = field(default_factory=dict)
 
 
 CLUSTERS: dict[int, ClusterMap] = {m.cluster_id: m for m in [
@@ -66,8 +69,11 @@ CLUSTERS: dict[int, ClusterMap] = {m.cluster_id: m for m in [
     ClusterMap(0x0045, c.BOOLEAN_STATE, {0: ("StateValue", _bool)}, events={0: "StateChange"}),
     ClusterMap(0x0081, c.VALVE, {4: ("CurrentState", _enum({0: "Closed", 1: "Open", 2: "Transitioning"}))},
                {"Open": 0, "Close": 1}),
-    # Readings only, no commands. ActivePower in mW, CumulativeEnergyImported in mWh.
-    ClusterMap(0x0090, c.ELECTRICAL_POWER_MEASUREMENT, {8: ("ActivePower", _int)}),
+    # Readings only, no commands. ActivePower in mW, CumulativeEnergyImported in mWh, and, from
+    # a plug that measures them, voltage in mV and current in mA.
+    ClusterMap(0x0090, c.ELECTRICAL_POWER_MEASUREMENT, {8: ("ActivePower", _int)},
+               optional={11: ("RMSVoltage", _int), 12: ("RMSCurrent", _int),
+                         4: ("Voltage", _int), 5: ("ActiveCurrent", _int)}),
     ClusterMap(0x0091, c.ELECTRICAL_ENERGY_MEASUREMENT, {1: ("CumulativeEnergyImported", _energy)}),
 ]}
 
@@ -100,10 +106,20 @@ def parse_path(path: str) -> tuple[int, int, int] | None:
 
 @dataclass(frozen=True)
 class MatterBinding:
-    """Where a Matter endpoint sits in the Porch home. Matter itself has no rooms."""
+    """Where a Matter endpoint sits in the Porch home. Matter itself has no rooms.
+
+    read_only keeps the hub from ever switching the device: its state and readings show, and it
+    takes no command. It is for a plug whose load must stay on, such as the one that powers the
+    Wi-Fi router the hub itself depends on.
+
+    name is what the home calls the device. Without it the device carries the name its node
+    reports, which is usually the product's ("Smart Wi-Fi Plug"), the same for every such plug.
+    """
 
     porch_id: str
     room: str
+    read_only: bool = False
+    name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -122,6 +138,10 @@ class MatterEndpoint:
     # (endpoint, cluster) pairs read from another endpoint of the same node: a plug whose
     # energy readings sit on a separate Electrical Sensor endpoint. Never command targets.
     linked: tuple[tuple[int, int], ...] = ()
+    # From the binding: the hub reads this device and never commands it.
+    read_only: bool = False
+    # The optional readings this device reports (see ClusterMap.optional), as attribute paths.
+    optional_paths: tuple[str, ...] = ()
 
     def locations(self) -> list[tuple[int, int]]:
         """Every (endpoint, cluster) this device's state comes from."""
@@ -130,8 +150,13 @@ class MatterEndpoint:
     def covers(self, endpoint_id: int, cluster_id: int) -> bool:
         return (endpoint_id, cluster_id) in self.locations()
 
-    def attribute_paths(self) -> list[str]:
+    def required_paths(self) -> list[str]:
+        """The attributes every device of this kind has."""
         return [f"{ep}/{cid}/{aid}" for ep, cid in self.locations() for aid in CLUSTERS[cid].attributes]
+
+    def attribute_paths(self) -> list[str]:
+        """Everything read for this device: the required attributes and the optional ones it reports."""
+        return self.required_paths() + list(self.optional_paths)
 
     def to_clusters(self, attributes: dict[str, Any]) -> Clusters:
         clusters: Clusters = {}
@@ -139,13 +164,18 @@ class MatterEndpoint:
             cmap = CLUSTERS[cid]
             values = {name: decode(attributes.get(f"{ep}/{cid}/{aid}"))
                       for aid, (name, decode) in cmap.attributes.items()}
+            values.update({name: decode(attributes.get(f"{ep}/{cid}/{aid}"))
+                           for aid, (name, decode) in cmap.optional.items()
+                           if f"{ep}/{cid}/{aid}" in self.optional_paths})
             accepted = attributes.get(f"{ep}/{cid}/{ACCEPTED_COMMAND_LIST}")
-            commands = [name for name, cmd_id in cmap.commands.items()
-                        if not isinstance(accepted, list) or cmd_id in accepted]
+            commands = [] if self.read_only else [name for name, cmd_id in cmap.commands.items()
+                                                  if not isinstance(accepted, list) or cmd_id in accepted]
             clusters[cmap.name] = Cluster(attributes=values, commands=commands)
         return clusters
 
     def command_target(self, command: str) -> ClusterMap | None:
+        if self.read_only:
+            return None
         for cid in self.cluster_ids:
             if command in CLUSTERS[cid].commands:
                 return CLUSTERS[cid]
@@ -213,13 +243,16 @@ def node_endpoints(node: dict[str, Any], home_id: str, bindings: dict[str, Matte
     for endpoint_id, device_type, cluster_ids in supported:
         binding = bindings.get(f"{node_id}/{endpoint_id}") or MatterBinding(
             f"{home_id}/matter-{node_id}-{endpoint_id}", "Unassigned")
-        name = _node_name(attributes, node_id, endpoint_id)
-        if len(supported) > 1:
+        name = binding.name or _node_name(attributes, node_id, endpoint_id)
+        if len(supported) > 1 and not binding.name:
             name = f"{name} ({endpoint_id})"
+        places = [(endpoint_id, cid) for cid in cluster_ids] + list(linked.get(endpoint_id, ()))
+        optional = tuple(path for ep, cid in places for aid in CLUSTERS[cid].optional
+                         if (path := f"{ep}/{cid}/{aid}") in attributes)
         endpoints.append(MatterEndpoint(binding.porch_id, node_id, endpoint_id, device_type, name,
                                         binding.room, cluster_ids,
                                         _serial_number(attributes, endpoint_id, shared_root), mac,
-                                        linked.get(endpoint_id, ())))
+                                        linked.get(endpoint_id, ()), binding.read_only, optional))
     return endpoints
 
 

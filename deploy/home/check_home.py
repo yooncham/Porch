@@ -8,7 +8,8 @@ agent may do with each device, and a wrong agent key is refused. Nothing is sent
 
 With a device id: an agent that may switch the device sends On and Off through Porch's
 request_action. Porch must allow each one and verify it against the device, and the device
-ends in the state it started in. If no agent may switch it without the owner, nothing is sent.
+ends in the state it started in. If no agent may switch it without the owner, or family
+protection has no control window open for it, nothing is sent.
 
 Run it through check.sh, which loads this home's settings. deploy/home/start.sh must be running.
 """
@@ -131,6 +132,17 @@ async def switch(device_id: str, names: dict[str, str], by_agent: dict[str, dict
             print(f"    {names[k]}: On is {d['your_access'].get('On', 'not a command')}")
         print("  That is Porch's rule at work. To let agents use a plug, say what it powers under")
         print(f"  device_capabilities in {CONFIG_PATH}, then restart deploy/home/start.sh.")
+        return
+
+    try:
+        protection = httpx.get(f"{hub_url}/protection", timeout=30).json()
+    except (httpx.HTTPError, ValueError):
+        protection = {}  # a hub from before family protection
+    if protection.get("enforced") and not (protection.get("live_writes_enabled")
+                                           and device_id in protection.get("device_ids", [])):
+        print("  Family protection is on and no control window is open for this device, so nothing was sent.")
+        print("  Check who is near it, open a window, then run this again:")
+        print(f"    {os.environ.get('PORCH_OWNER_COMMAND') or 'deploy/home/owner.sh'} allow --device {device_id}")
         return
 
     started_on = state["OnOff.OnOff"]

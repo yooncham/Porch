@@ -35,6 +35,7 @@ from .commands import CommandSpec, InvalidParams, UnsupportedCommand
 from .drivers import BaseDriver, CommandRejected
 from .idempotency import IdempotencyConflict
 from .models import Clusters, CommandResponse, ControlPath, Device, utcnow
+from .protection import FamilyProtection
 from .registry import DeviceRegistry, Route
 from .seed import demo_records
 
@@ -88,8 +89,10 @@ class _Plan:
 
 class DigitalCopy:
     def __init__(self, registry: DeviceRegistry, drivers: Sequence[BaseDriver],
-                 offline: bool = False, snapshot_path: Path | None = None, demo_fallback: bool = True) -> None:
+                 offline: bool = False, snapshot_path: Path | None = None, demo_fallback: bool = True,
+                 protection: FamilyProtection | None = None) -> None:
         self._registry = registry
+        self._protection = protection
         self._drivers = list(drivers)
         self._started: set[int] = set()  # ids of drivers whose start() ran
         self._offline = offline
@@ -317,6 +320,11 @@ class DigitalCopy:
             commands.expected_attributes(spec, parsed, device.clusters)  # the live path checks the same
         except (CommandRejected, commands.CannotPredict) as exc:
             return _Plan(route, spec, parsed, f"{route.path}: {exc}" if len(routes) > 1 else str(exc))
+        if not self._offline and self._protection is not None:
+            # Live, family protection would refuse this before anything is sent, so the dry run
+            # says so. Offline, the copy answers and no device is touched.
+            if (blocked := self._protection.refusal(device.id, spec.name)) is not None:
+                return _Plan(route, spec, parsed, blocked)
         return _Plan(route, spec, parsed, None)
 
     @staticmethod

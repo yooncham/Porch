@@ -62,8 +62,9 @@ class MatterDriver(BaseDriver):
         paths = endpoint.attribute_paths()
         versions = {path: self._versions.get((endpoint.node_id, path), 0) for path in paths}
         values = await self._client.command("read_attribute", node_id=endpoint.node_id, attribute_path=paths)
-        if not isinstance(values, dict) or (missing := [p for p in paths if p not in values]):
-            missing = paths if not isinstance(values, dict) else missing
+        required = endpoint.required_paths()  # an optional reading the device stops giving is not an error
+        if not isinstance(values, dict) or (missing := [p for p in required if p not in values]):
+            missing = required if not isinstance(values, dict) else missing
             raise DriverError(f"Matter Server did not return {', '.join(missing)} for {device_id}")
         node = self._nodes.get(endpoint.node_id)
         if node is not None:
@@ -76,8 +77,22 @@ class MatterDriver(BaseDriver):
             return endpoint.to_clusters({**node["attributes"], **values})
         return endpoint.to_clusters(values)
 
+    async def details(self, device_id: str) -> list[dict[str, str]]:
+        """Everything the plug or device reports over Matter that people care about (names.py), from
+        what the Matter Server holds. When the node cannot be reached, these are the last values heard."""
+        from .names import rows_for
+
+        endpoint = self._endpoint(device_id)
+        node = self._nodes.get(endpoint.node_id) or {}
+        rows = [] if self._online(endpoint) else [
+            {"group": "Matter", "name": "Reachable now", "value": "no: these are the last values heard"}]
+        endpoints = {endpoint.endpoint_id, *(ep for ep, _ in endpoint.linked)}
+        return rows + rows_for(node.get("attributes", {}), endpoints)
+
     async def send_command(self, device_id: str, command: str, params: dict[str, Any]) -> None:
         endpoint = self._endpoint(device_id)
+        if endpoint.read_only:
+            raise CommandRejected(f"{device_id} is read only in this home's settings, so {command} was not sent")
         target = endpoint.command_target(command)
         if target is None:
             raise CommandRejected(f"{device_id} has no Matter cluster for {command}")

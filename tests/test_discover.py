@@ -16,24 +16,27 @@ def lg_entries() -> list[dict]:
     cloud = FakeThinQCloud()
     cloud.add_air_purifier("lg-purifier-aaaa", "PuriCare 360")
     cloud.add_air_purifier("lg-purifier-bbbb", "Bedroom purifier")
+    cloud.add_stick_cleaner("lg-stick-cccc", "Cordless vacuum")
     entries = asyncio.run(cloud.list_devices())
-    # A cordless stick vacuum: LG lists it, the hub has no profile for it.
-    entries.append({"deviceId": "lg-stick-cccc", "deviceInfo": {"deviceType": "DEVICE_STICK_CLEANER",
-                                                                "modelName": "A9", "alias": "Cordless vacuum"}})
+    # A dishwasher: LG lists it, the hub has no profile for it.
+    entries.append({"deviceId": "lg-dish-dddd", "deviceInfo": {"deviceType": "DEVICE_DISH_WASHER",
+                                                               "modelName": "D12", "alias": "Dishwasher"}})
     return entries
 
 
 def test_lg_rows_keep_unsupported_appliances_and_bind_only_supported_ones():
     appliances = discover.lg_appliances(lg_entries())
     assert [(a.lg_id, a.supported) for a in appliances] == [
-        ("lg-purifier-aaaa", True), ("lg-purifier-bbbb", True), ("lg-stick-cccc", False)]
-    # The first purifier gets the id the demo, gateway and dashboards already use.
+        ("lg-purifier-aaaa", True), ("lg-purifier-bbbb", True), ("lg-stick-cccc", True), ("lg-dish-dddd", False)]
+    # The first purifier gets the id the demo, gateway and dashboards already use. A stick
+    # vacuum, which the hub reads and cannot control, is named after what its owner calls it.
     assert discover.lg_bindings(appliances, "home-1") == {
         "lg-purifier-aaaa": {"porch_id": "home-1/air-purifier", "room": "Unassigned"},
         "lg-purifier-bbbb": {"porch_id": "home-1/air-purifier-2", "room": "Unassigned"},
+        "lg-stick-cccc": {"porch_id": "home-1/cordless-vacuum", "room": "Unassigned"},
     }
     report = "\n".join(discover.lg_report(appliances))
-    assert "lg-stick-cccc" in report and "not used: no profile for this type yet" in report
+    assert "lg-dish-dddd" in report and "not used: no profile for this type yet" in report
 
 
 def test_lg_default_id_is_the_one_the_driver_gives():
@@ -136,3 +139,87 @@ def test_run_says_when_the_matter_server_is_not_there():
 
 def test_run_needs_a_platform():
     assert asyncio.run(discover.run({}, out=io.StringIO())) == 2
+
+
+# Google Home and Ring: their rows come from the drivers, here against the drivers' stand-ins.
+
+def test_google_home_rows_and_bindings(monkeypatch, tmp_path):
+    from test_google_home_mcp import DISPLAY, LIGHT, PLUG, TV, FakeGoogle, make_driver
+
+    from porch_hub.drivers import GoogleHomeBinding
+
+    google = FakeGoogle().add_tv()
+
+    async def fetch(env):
+        bindings = {key: GoogleHomeBinding(b["porch_id"], b.get("room"))
+                    for key, b in json.loads(env["GOOGLE_HOME_BINDINGS"]).items()}
+        driver = make_driver(google, tmp_path, bindings=bindings)
+        await driver.start()
+        try:
+            return driver.rows()
+        finally:
+            await driver.stop()
+
+    monkeypatch.setattr(discover, "fetch_google", fetch)
+    out = io.StringIO()
+    env = {"GOOGLE_HOME_DIRECTORY": str(tmp_path),
+           "GOOGLE_HOME_BINDINGS": json.dumps({LIGHT: {"porch_id": "home-1/desk-lamp"},
+                                               "device@gone": {"porch_id": "home-1/old-lamp", "room": "Attic",
+                                                               "read_only": True}})}
+    assert asyncio.run(discover.run(env, out=out)) == 0
+    text = out.getvalue()
+    rows = {line.split()[0]: line for line in text.splitlines() if line.strip().startswith("device@")}
+    assert "home-1/desk-lamp" in rows[LIGHT] and rows[LIGHT].rstrip().endswith("On, Off")
+    assert rows[PLUG].rstrip().endswith("read only")
+    assert "home-1/living-room-tv" in rows[TV] and rows[TV].rstrip().endswith("Play, Pause")
+    assert "not used: no mapping for this kind yet" in rows[DISPLAY]
+    line = next(line for line in text.splitlines() if line.startswith("GOOGLE_HOME_BINDINGS="))
+    assert json.loads(line.removeprefix("GOOGLE_HOME_BINDINGS=").strip("'")) == {
+        LIGHT: {"porch_id": "home-1/desk-lamp"},  # kept as it is: no room, so it follows Google's
+        PLUG: {"porch_id": "home-1/plug1", "room": "Living Room"},  # a suggestion, with Google's room
+        TV: {"porch_id": "home-1/living-room-tv", "room": "Living Room"},
+        # Not listed now, still kept, with its read-only mark.
+        "device@gone": {"porch_id": "home-1/old-lamp", "room": "Attic", "read_only": True},
+    }
+    assert google.actions == []  # discovery only reads
+
+    google.failures["list_homes"] = {"isError": True, "content": [{"type": "text", "text": "private-detail"}]}
+    out = io.StringIO()
+    assert asyncio.run(discover.run(env, out=out)) == 1
+    assert "Could not read Google Home" in out.getvalue() and "deploy/home/connect.sh google" in out.getvalue()
+    assert "private-detail" not in out.getvalue()
+
+
+def test_ring_rows_and_bindings(monkeypatch, tmp_path):
+    from test_ring import FakeRing
+
+    from porch_hub.drivers import RingBinding
+
+    fake = FakeRing(tmp_path / "ring-authorization.json")
+
+    async def fetch(env):
+        bindings = {key: RingBinding(b["porch_id"], b["room"]) for key, b in json.loads(env["RING_BINDINGS"]).items()}
+        driver = fake.driver(bindings=bindings)
+        await driver.start()
+        return driver.rows()
+
+    monkeypatch.setattr(discover, "fetch_ring", fetch)
+    out = io.StringIO()
+    assert asyncio.run(discover.run({"RING_AUTHORIZATION_FILE": str(fake.path)}, out=out)) == 0
+    text = out.getvalue()
+    assert "not used: only doorbells are listed" in text and "private-secret" not in text
+    line = next(line for line in text.splitlines() if line.startswith("RING_BINDINGS="))
+    suggested = json.loads(line.removeprefix("RING_BINDINGS=").strip("'"))
+    assert suggested == {"native-doorbell": {"porch_id": "home-1/front-door", "room": "Unassigned"}}
+
+    out = io.StringIO()
+    kept = {"native-doorbell": {"porch_id": "home-1/front-doorbell", "room": "Entry"}}
+    env = {"RING_AUTHORIZATION_FILE": str(fake.path), "RING_BINDINGS": json.dumps(kept)}
+    assert asyncio.run(discover.run(env, out=out)) == 0
+    assert f"RING_BINDINGS='{json.dumps(kept)}'" in out.getvalue() and "home-1/front-doorbell" in out.getvalue()
+
+
+def test_lg_refusal_says_what_to_check():
+    hint = discover.lg_hint("LG ThinQ API error NOT_ALLOWED_API_AGAIN (1309): Not allowed api again", "US")
+    assert "LG_THINQ_COUNTRY (now US)" in hint and "KR" in hint and "scope" in hint
+    assert discover.lg_hint("LG ThinQ API error INVALID_TOKEN (1103): bad token", "US") is None

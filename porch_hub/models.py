@@ -19,18 +19,24 @@ class ControlPath(StrEnum):
     LG_THINQ = "lg_thinq"
     GOOGLE_HOME = "google_home"
     MATTER = "matter"
+    RING = "ring"
 
 
 class DeviceType(StrEnum):
     LAUNDRY_DRYER = "LaundryDryer"
     LAUNDRY_WASHER = "LaundryWasher"
     ROBOTIC_VACUUM_CLEANER = "RoboticVacuumCleaner"
+    # A cordless stick vacuum on its charging stand. Matter has no such type; the hub reads it only.
+    STICK_VACUUM = "StickVacuumCleaner"
     AIR_PURIFIER = "AirPurifier"
+    # A TV or a streaming box that shows what is cast to it (Matter's Casting Video Player).
+    CASTING_VIDEO_PLAYER = "CastingVideoPlayer"
     DOOR_LOCK = "DoorLock"
     ON_OFF_PLUG = "OnOffPlug"
     ON_OFF_LIGHT = "OnOffLight"
     WATER_LEAK_SENSOR = "WaterLeakSensor"
     WATER_VALVE = "WaterValve"
+    DOORBELL = "Doorbell"
 
 
 class Cluster(BaseModel):

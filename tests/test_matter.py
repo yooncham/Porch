@@ -9,6 +9,7 @@ from fake_matter_server import FakeMatterServer, node, running_in_thread
 from fastapi.testclient import TestClient
 
 from porch_hub.commands import UnsupportedCommand
+from porch_hub.drivers.base import CommandRejected
 from porch_hub.drivers.matter import MatterBinding, MatterDriver, matter_driver_from_env
 from porch_hub.events import EventBus, SubscriberLagged
 from porch_hub.idempotency import IdempotencyStore
@@ -46,7 +47,8 @@ class Hub:
 
     async def __aenter__(self) -> "Hub":
         self.url = await self.server.start(self.driver_options.pop("port", 0))
-        self.driver = MatterDriver(self.url, bindings=BINDINGS, reconnect_delay_s=0.05, **self.driver_options)
+        self.driver = MatterDriver(self.url, bindings=self.driver_options.pop("bindings", BINDINGS),
+                                   reconnect_delay_s=0.05, **self.driver_options)
         self.registry = DeviceRegistry([self.driver], EventBus())
         self.router = CommandRouter(self.registry, IdempotencyStore(), confirm_timeout_s=0.5, poll_interval_s=0.02)
         await self.driver.start()
@@ -165,6 +167,35 @@ def test_energy_plug_reports_power_and_energy(separate_sensor, struct_by_tag):
     assert state["OnOff"].attributes == {"OnOff": True}
 
 
+@pytest.mark.parametrize("separate_sensor", [False, True])
+def test_a_plug_that_measures_volts_and_amps_lists_them_and_others_are_not_asked(separate_sensor):
+    """RMSVoltage (mV) and RMSCurrent (mA) are optional: a plug has them or it does not."""
+    ep = 2 if separate_sensor else 1
+    measuring = energy_plug(separate_sensor=separate_sensor)
+    measuring["attributes"].update({f"{ep}/144/11": 121_104, f"{ep}/144/12": 1_034})
+
+    async def scenario(plug):
+        server = FakeMatterServer([plug])
+        async with Hub(server) as hub:
+            listed = (await hub.driver.list_devices())[0]
+            state = await hub.driver.read_state(ENERGY_PLUG)
+            await server.set_attribute(9, f"{ep}/144/11", 119_800)
+            await asyncio.sleep(0.05)
+            pushed = (await hub.driver.list_devices())[0]
+            return listed, state, pushed
+
+    listed, state, pushed = run(lambda: scenario(measuring))
+    reading = {"ActivePower": 42_500, "RMSVoltage": 121_104, "RMSCurrent": 1_034}
+    assert listed.clusters["ElectricalPowerMeasurement"].attributes == reading
+    assert state["ElectricalPowerMeasurement"].attributes == reading
+    assert pushed.clusters["ElectricalPowerMeasurement"].attributes == {**reading, "RMSVoltage": 119_800}
+
+    # A plug without them: nothing empty is shown, and the read does not ask for what it lacks.
+    listed, state, _ = run(lambda: scenario(energy_plug(separate_sensor=separate_sensor)))
+    assert listed.clusters["ElectricalPowerMeasurement"].attributes == {"ActivePower": 42_500}
+    assert state["ElectricalPowerMeasurement"].attributes == {"ActivePower": 42_500}
+
+
 def test_power_reading_from_a_separate_sensor_endpoint_updates_the_plug():
     async def scenario():
         server = FakeMatterServer([energy_plug(separate_sensor=True)])
@@ -189,6 +220,92 @@ def test_energy_endpoint_is_not_guessed_when_a_node_has_two_plugs():
     devices = run(scenario)
     assert sorted(d.id for d in devices) == ["home-1/matter-10-1", "home-1/matter-10-3"]
     assert all("ElectricalPowerMeasurement" not in d.clusters for d in devices)
+
+
+def test_a_read_only_binding_shows_the_plugs_readings_and_never_switches_it():
+    """The plug that powers the Wi-Fi router: its watts belong on the energy panel, its switch does not."""
+    router_plug = {"9/1": MatterBinding("home-1/living-wifi", "Living Room", read_only=True)}
+
+    async def scenario():
+        server = FakeMatterServer([energy_plug()])
+        async with Hub(server, bindings=router_plug) as hub:
+            device = (await hub.driver.list_devices())[0]
+            try:
+                await hub.command("home-1/living-wifi", "Off", "router-off")
+            except UnsupportedCommand as exc:
+                refusal = str(exc)
+            try:
+                await hub.driver.send_command("home-1/living-wifi", "Off", {})  # even asked directly
+            except CommandRejected as exc:
+                direct = str(exc)
+            return device, refusal, direct, await hub.driver.read_state("home-1/living-wifi"), server
+
+    device, refusal, direct, state, server = run(scenario)
+    assert (device.id, device.room, device.name) == ("home-1/living-wifi", "Living Room", "P110M")
+    assert all(cluster.commands == [] for cluster in device.clusters.values())
+    assert device.clusters["ElectricalPowerMeasurement"].attributes == {"ActivePower": 42_500}
+    assert "does not support 'Off'" in refusal and "read only" in direct
+    assert state["OnOff"].attributes == {"OnOff": True}  # still on
+    assert server.commands("device_command") == []  # nothing reached the Matter Server
+
+
+def test_details_name_what_a_plug_reports_and_never_its_identity_or_network():
+    """The full record of a plug like the home's: who made it, its health, its Wi-Fi signal, its
+    meter. Its serial number, unique id, label, network interfaces, Wi-Fi network and fabrics are
+    in the node too, and none of them is shown."""
+    plug = energy_plug()
+    plug["attributes"].update({
+        "0/40/1": "TP-Link", "0/40/5": "private-node-label", "0/40/10": "1.3.0", "0/40/15": "private-serial",
+        "0/40/18": "private-unique-id",
+        "0/51/0": [{"name": "private-wlan0", "hardwareAddress": "private-mac", "IPv4Addresses": ["private-ip"]}],
+        "0/51/1": 3, "0/51/2": 90_061, "0/51/4": 1,
+        "0/54/0": "private-bssid", "0/54/3": 6, "0/54/4": -48,
+        "0/62/0": [{"fabricIndex": 1, "label": "private-fabric"}],
+        "1/6/16387": 1, "1/144/11": 121_104, "1/144/12": 1_034,
+    })
+    named = {"9/1": MatterBinding("home-1/plug1", "Living Room", name="Plug1")}
+
+    async def scenario(node):
+        async with Hub(FakeMatterServer([node]), bindings=named) as hub:
+            return await hub.driver.details("home-1/plug1")
+
+    rows = run(lambda: scenario(plug))
+    assert [(r["group"], r["name"], r["value"]) for r in rows] == [
+        ("Device", "Maker", "TP-Link"),
+        ("Device", "Product", "P110M"),
+        ("Device", "Software version", "1.3.0"),
+        ("Health", "Restarts", "3"),
+        ("Health", "Up since the last restart", "1 d 1 h"),
+        ("Health", "Last restart because", "Power on"),
+        ("Wi-Fi", "Channel", "6"),
+        ("Wi-Fi", "Signal", "-48 dBm"),
+        ("Switch", "On", "yes"),
+        ("Switch", "After a power cut", "On"),
+        ("Power", "Power", "42.5 W"),
+        ("Power", "Voltage (RMS)", "121.1 V"),
+        ("Power", "Current (RMS)", "1.034 A"),
+        ("Energy", "Used, counter", "1.250 kWh"),
+    ]
+    assert "private" not in json.dumps(rows)
+
+    # Out of reach (the Mac away from home): the last values heard, and it says so first.
+    plug["available"] = False
+    rows = run(lambda: scenario(plug))
+    assert rows[0] == {"group": "Matter", "name": "Reachable now", "value": "no: these are the last values heard"}
+    assert {"group": "Power", "name": "Power", "value": "42.5 W"} in rows
+
+
+def test_a_binding_can_carry_the_homes_own_name_for_a_device():
+    """Four identical plugs all report the product's name; the home knows them by its own."""
+    named = {"9/1": MatterBinding("home-1/plug1", "Living Room", name="Plug1")}
+
+    async def scenario():
+        async with Hub(FakeMatterServer([energy_plug()]), bindings=named) as hub:
+            return (await hub.driver.list_devices())[0]
+
+    device = run(scenario)
+    assert (device.id, device.name, device.room) == ("home-1/plug1", "Plug1", "Living Room")
+    assert device.clusters["OnOff"].commands == ["Off", "On", "Toggle"]  # naming it changes nothing else
 
 
 def test_energy_readings_do_not_block_plug_commands():

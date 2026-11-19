@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# List what LG and the Matter Server report, with bindings to paste into home.env. Reads only.
+# List what LG, the Matter Server, Google Home and Ring report, with bindings to paste into
+# home.env. Reads only.
 #
 #   deploy/home/discover.sh
 set -euo pipefail
@@ -12,4 +13,5 @@ set -a
 # shellcheck disable=SC1091
 . "$CONF/home.env"
 set +a
+export PORCH_CONFIG_DIR="$CONF"
 exec "$REPO/.venv/bin/python" -m porch_hub.discover

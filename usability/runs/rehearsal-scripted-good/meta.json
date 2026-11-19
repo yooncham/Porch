@@ -1,0 +1,28 @@
+{
+  "name": "rehearsal-scripted-good",
+  "started": "2026-11-16T16:32:53+00:00",
+  "wife_in": null,
+  "hub": "http://127.0.0.1:8102",
+  "gateway": "http://127.0.0.1:8002/mcp",
+  "agent": {
+    "id": "fresh-agent",
+    "name": "Fresh agent",
+    "acts_for": "Yoonchan",
+    "scopes": [
+      "lighting",
+      "appliance",
+      "heating",
+      "entry",
+      "sensor"
+    ]
+  },
+  "documentation": {
+    "file": "docs/AGENTS.md",
+    "sha256_12": "71af9dcc519a"
+  },
+  "task": {
+    "file": "usability/task.md",
+    "sha256_12": "d526c5d77ddc"
+  },
+  "stopped": "2026-11-16T16:33:06+00:00"
+}

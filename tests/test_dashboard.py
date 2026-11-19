@@ -1,8 +1,6 @@
 import re
 from pathlib import Path
 
-import pytest
-
 from fastapi.testclient import TestClient
 
 from porch_hub.main import Settings, create_app
@@ -34,13 +32,10 @@ def test_dashboard_is_served_by_the_hub():
     assert re.search(r"@tailwindcss/browser@\d+\.\d+\.\d+", response.text)
 
 
-TAILWIND_PAGES = [PAGE, PAGE.with_name("digital-twin.html")]
-
-
-@pytest.mark.parametrize("page_path", TAILWIND_PAGES, ids=lambda p: p.name)
-def test_every_class_the_page_uses_has_an_offline_style(page_path):
-    """Demo Day may have no internet for the Tailwind CDN; the inline rules must cover the whole page."""
-    page = page_path.read_text()
+def test_every_class_the_page_uses_has_an_offline_style():
+    """Demo Day may have no internet for the Tailwind CDN; the inline rules must cover the whole page.
+    (The dashboard is the only page that uses Tailwind; the others carry their own styles.)"""
+    page = PAGE.read_text()
     css = re.search(r'<style id="fallback-styles">(.*?)</style>', page, re.S).group(1)
     used = set()
     for pattern in (r'class="([^"]*)"', r'\bel\(\s*"[a-z0-9]+"\s*,\s*"([^"]*)"', r'\bcls\("([^"]*)"\)'):
@@ -99,3 +94,9 @@ def test_offline_switch_and_simulated_commands_reach_the_dashboard():
     assert (mode["data"], back["data"]) == ({"offline": True}, {"offline": False})
     assert "device_id" not in mode  # about the hub, not a device; empty fields are left out
     assert (executed["status"], executed["simulated"], executed["latency_ms"]) == ("done", True, 0)
+
+
+def test_dashboard_says_which_cluster_a_repeated_attribute_name_belongs_to():
+    """A purifier has three MeasuredValue rows (PM1, PM2.5, PM10): each says which it is."""
+    script = PAGE.read_text().split("<script>")[-1]
+    assert "names.indexOf(name) !== i" in script and "shared.has(name) ? `${name} · ${short}` : name" in script

@@ -59,12 +59,12 @@ flowchart LR
 | Registry and dedup | `porch_hub/registry.py`, `dedup.py` | The same lock seen by Matter and by Google Home becomes one device with two control paths, matched by serial number, MAC address, or name and room. Local Matter is preferred. |
 | LG ThinQ driver | `porch_hub/drivers/thinq/` | LG's official `thinqconnect` SDK with a personal access token. Push updates over MQTT. Refuses to start an appliance whose physical Remote Control switch is off. |
 | Matter driver | `porch_hub/drivers/matter/` | Talks to a matter.js server over WebSocket (`ws://localhost:5580`). Lock, on/off, leak sensor and valve, with live events. |
-| Google Home driver | `porch_hub/drivers/google_home.py` | Simulated. Blocks `UnlockDoor`, as Google does for cloud unlocks. |
+| Google Home driver | `porch_hub/drivers/google_home/` | Two drivers. The simulated one serves the demo home and blocks `UnlockDoor`, as Google does for cloud unlocks. The other reaches a real home through Google's Home MCP server: it switches lights, reads plugs, and reads a TV and plays and pauses it. |
 | Digital copy | `porch_hub/digital_copy.py` | A shadow of every device. Dry-runs commands without touching hardware, and in offline mode runs the whole demo with no network at all. |
 | Event bus | `porch_hub/events.py` | Pushes every state change, command and mode switch to the pages over `/ws/events`. |
 | Dashboard | `/dashboard` | The operator view: every device, live state, a latency log, test buttons, and the offline switch. |
-| Digital twin | `/digital-twin` | A floor plan of the home. Shows the physical devices and the digital copy side by side, with scripted scenarios. |
-| 3D home twin | `/home-3d` | The home and its devices in 3D. Each device's model shows its live state; click one to see its attributes and send commands. |
+| Digital twin | `/digital-twin` | The home's floor plan with every device on it, live. Click a device to see its state and send commands. A real home draws its own plan from a layout file. |
+| 3D home twin | `/home-3d` | The same home and its devices in 3D, built from the same plan. Each device's model shows its live state; click one to see its attributes and send commands. |
 | Stage display | `/stage` | For the projector. Agents, safety banners and the audit trail in plain language. Keys 1–5 play scripted scenes; P opens the presenter panel. |
 | engine_lite | `engine_lite/` | The HW6 stand-in for Erik's Engine. Three MCP tools for the agent, an energy-only scope, owner approval for unlocking, a colored audit trail in its terminal, and a scripted walkthrough. |
 

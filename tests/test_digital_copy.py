@@ -251,7 +251,7 @@ def test_real_devices_only_leaves_out_every_simulated_platform():
 
 
 def test_real_devices_only_needs_a_live_platform():
-    with pytest.raises(RuntimeError, match="MATTER_SERVER_URL or LG_THINQ_PAT"):
+    with pytest.raises(RuntimeError, match="needs one of MATTER_SERVER_URL, LG_THINQ_PAT, GOOGLE_HOME_DIRECTORY"):
         default_drivers(real_devices_only=True, env={})
 
 

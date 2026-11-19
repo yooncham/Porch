@@ -1,0 +1,849 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Porch Live Flow</title>
+<script src="/nav.js" defer></script>
+<style>
+/* How a request moves through Porch, live. Each agent request is drawn check by check, at a pace a
+   viewer can follow, from the gateway's stage feed (type "flow": porch_gateway/flow.py) and the
+   hub's own events. With nothing happening the page is the architecture: who asks, Porch's
+   checks, the hub's steps, the platforms and the devices. No CDN and no web font, so it works on a
+   network with no internet. */
+:root{
+  --bg:#060a14;--panel:#0b1222;--panel-2:#111a2e;--line:#22304a;--line-2:#2f3f5f;
+  --text:#e8edf7;--muted:#93a1bb;--dim:#5d6a84;
+  --ok:#34d399;--warn:#fbbf24;--bad:#fb7185;--live:#38bdf8;--violet:#a78bfa;--on:#fde68a;
+  --ok-bg:rgba(52,211,153,.10);--warn-bg:rgba(251,191,36,.11);--bad-bg:rgba(251,113,133,.11);--live-bg:rgba(56,189,248,.10);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box}
+/* Type follows the screen, so a 720p recording looks like a smaller 1080p one. */
+html{font-size:clamp(12px,min(.92vw,1.62vh),24px);background:var(--bg)}
+html,body{margin:0;background:var(--bg);color:var(--text)}
+body{min-height:100vh;line-height:1.4;display:flex;flex-direction:column}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--live);outline-offset:2px}
+
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1.3rem;padding:.85rem 1.4rem .75rem;border-bottom:1px solid var(--line)}
+.top h1{margin:0;font-size:1.45rem;font-weight:750;letter-spacing:-.01em}
+.top .sub{margin:.1rem 0 0;color:var(--muted);font-size:.9rem;max-width:62ch}
+.pills{margin-left:auto;display:flex;flex-wrap:wrap;gap:.45rem;justify-content:flex-end}
+.pill{display:inline-flex;align-items:center;gap:.45rem;padding:.28rem .75rem;border:1px solid var(--line);border-radius:999px;font-size:.78rem;font-weight:650;color:var(--muted);white-space:nowrap}
+.pill .dot{width:.5rem;height:.5rem;border-radius:50%;background:var(--dim);flex:none}
+.pill.ok .dot{background:var(--ok)}.pill.bad .dot{background:var(--bad)}.pill.warn .dot{background:var(--warn)}
+
+.stage{position:relative;flex:1;display:grid;grid-template-columns:minmax(11rem,15%) minmax(0,1fr) minmax(13rem,19%);gap:1.3rem;padding:1.1rem 1.4rem .7rem}
+.col-title{margin:0 0 .6rem;font-size:.72rem;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.links{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:1}
+.links path{fill:none;stroke:var(--live);stroke-width:2.2;stroke-dasharray:7 7;animation:dash 1s linear infinite;opacity:.85}
+.links path.held{stroke:var(--warn)}.links path.blocked{stroke:var(--bad)}.links path.done{stroke:var(--ok)}
+@keyframes dash{to{stroke-dashoffset:-14}}
+
+.agent{position:relative;z-index:2;border:1px solid var(--line);border-radius:.7rem;background:var(--panel);padding:.55rem .75rem;margin-bottom:.5rem;transition:border-color .35s,box-shadow .35s,opacity .35s}
+.agent .name{font-weight:700}
+.agent .for{color:var(--muted);font-size:.8rem}
+.agent .app{color:var(--dim);font-size:.75rem}
+.agent .limit{color:var(--violet);font-size:.75rem}
+.kind{display:inline-block;margin-top:.3rem;padding:.06rem .45rem;border-radius:.35rem;font-size:.64rem;font-weight:800;letter-spacing:.07em}
+.kind.control{background:var(--ok-bg);color:var(--ok)}.kind.energy{background:var(--warn-bg);color:var(--warn)}.kind.reads{background:rgba(147,161,187,.13);color:var(--muted)}
+.stage.busy .agent:not(.active){opacity:.42}
+.agent.active{border-color:var(--live);box-shadow:0 0 0 3px rgba(56,189,248,.18),0 0 26px rgba(56,189,248,.16)}
+
+.path{position:relative;z-index:2;display:flex;flex-direction:column;min-width:0}
+.groups{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,4fr);gap:.9rem;margin-bottom:.6rem}
+.group{border-top:2px solid var(--violet);padding-top:.35rem;font-size:.74rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--violet)}
+.group.hub{border-color:var(--live);color:var(--live)}
+.group span{display:block;margin-top:.1rem;font-size:.8rem;font-weight:500;letter-spacing:0;text-transform:none;color:var(--muted)}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.9rem}
+.step{position:relative;display:flex;flex-direction:column;gap:.4rem;min-height:12.5rem;padding:.75rem .7rem;border:1px solid var(--line);border-radius:.8rem;background:var(--panel);transition:border-color .35s,background .35s,box-shadow .35s,opacity .35s}
+.step::after{content:"";position:absolute;top:1.6rem;right:-.95rem;width:.95rem;height:2px;background:var(--line-2)}
+.step:last-child::after{display:none}
+.step .head{display:flex;align-items:center;gap:.5rem}
+.step .num{display:inline-grid;place-items:center;width:1.7rem;height:1.7rem;border-radius:50%;border:1.5px solid var(--line-2);font-weight:800;font-size:.85rem;color:var(--muted);flex:none}
+.step .title{font-weight:750;font-size:.95rem;line-height:1.15}
+.step .short{font-weight:750;font-size:.95rem;min-height:1.3em;line-height:1.25}
+.step .text{color:var(--muted);font-size:.8rem;line-height:1.35;overflow-wrap:anywhere}
+.step.idle .text{color:var(--dim)}
+.step.active{border-color:var(--live);background:linear-gradient(180deg,var(--live-bg),var(--panel));box-shadow:0 0 0 3px rgba(56,189,248,.16)}
+.step.active .num{border-color:var(--live);color:var(--live)}
+.step.ok{border-color:rgba(52,211,153,.65);background:linear-gradient(180deg,var(--ok-bg),var(--panel))}
+.step.ok .num{border-color:var(--ok);color:var(--ok)}.step.ok .short{color:var(--ok)}.step.ok::after{background:var(--ok)}
+.step.wait{border-color:var(--warn);background:linear-gradient(180deg,var(--warn-bg),var(--panel));animation:pulse 1.6s ease-in-out infinite}
+.step.wait .num{border-color:var(--warn);color:var(--warn)}.step.wait .short{color:var(--warn)}
+.step.stop{border-color:var(--bad);background:linear-gradient(180deg,var(--bad-bg),var(--panel))}
+.step.stop .num{border-color:var(--bad);color:var(--bad)}.step.stop .short{color:var(--bad)}
+.step.skip{opacity:.38;border-style:dashed}
+.stage.busy .step.idle{opacity:.5}
+@keyframes pulse{50%{box-shadow:0 0 0 6px rgba(251,191,36,.15)}}
+.chips{display:flex;flex-direction:column;gap:.3rem}
+.chip{display:flex;align-items:center;justify-content:space-between;gap:.4rem;padding:.2rem .45rem;border:1px solid var(--line);border-radius:.45rem;font-size:.72rem;color:var(--muted);transition:border-color .35s,background .35s,box-shadow .35s,color .35s}
+.chip b{font-weight:700;color:var(--text)}
+.chip.lit{border-color:var(--live);background:var(--live-bg);color:var(--text);box-shadow:0 0 12px rgba(56,189,248,.25)}
+.token{position:absolute;left:0;top:0;z-index:3;display:inline-flex;align-items:center;gap:.45rem;max-width:22rem;padding:.3rem .8rem .3rem .3rem;border-radius:999px;background:#0e1a33;border:1.5px solid var(--live);font-size:.8rem;font-weight:700;white-space:nowrap;box-shadow:0 6px 24px rgba(0,0,0,.45);transition:transform .7s cubic-bezier(.2,.8,.2,1),opacity .4s,border-color .3s;pointer-events:none}
+.token .label{overflow:hidden;text-overflow:ellipsis}
+.token .face{display:inline-grid;place-items:center;width:1.45rem;height:1.45rem;border-radius:50%;background:var(--live);color:#04101f;font-weight:900;font-size:.75rem;flex:none}
+.token.held{border-color:var(--warn)}.token.held .face{background:var(--warn)}
+.token.blocked{border-color:var(--bad)}.token.blocked .face{background:var(--bad)}
+.token.done{border-color:var(--ok)}.token.done .face{background:var(--ok)}
+
+.room{margin:.7rem 0 .3rem;font-size:.66rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.room:first-child{margin-top:0}
+.device{position:relative;z-index:2;display:flex;align-items:center;gap:.5rem;border:1px solid var(--line);border-radius:.6rem;background:var(--panel);padding:.42rem .6rem;margin-bottom:.38rem;transition:border-color .35s,box-shadow .35s,opacity .35s}
+.device .what{min-width:0}
+.device .name{display:block;font-weight:650;font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.device .via{display:block;font-size:.66rem;color:var(--dim);white-space:nowrap}
+.device .state{margin-left:auto;font-size:.74rem;font-weight:800;white-space:nowrap}
+.state.on{color:var(--on)}.state.live{color:var(--live)}.state.ok{color:var(--ok)}.state.off{color:var(--dim)}.state.warn{color:var(--warn)}
+.stage.busy .device:not(.target){opacity:.45}
+.device.target{border-color:var(--live);box-shadow:0 0 0 3px rgba(56,189,248,.18)}
+.device.target.done{border-color:var(--ok);box-shadow:0 0 0 3px rgba(52,211,153,.2)}
+.device.target.held{border-color:var(--warn);box-shadow:0 0 0 3px rgba(251,191,36,.18)}
+.device.target.blocked{border-color:var(--bad);box-shadow:0 0 0 3px rgba(251,113,133,.18)}
+
+.caption{margin:0 1.4rem;padding:1rem 1.3rem;border:1px solid var(--line);border-radius:.9rem;background:var(--panel);min-height:6.6rem}
+.caption .main{font-size:1.55rem;font-weight:700;line-height:1.3}
+.caption .sub{margin-top:.3rem;color:var(--muted);font-size:1.02rem;line-height:1.4}
+.caption .replay{display:inline-block;margin-right:.6rem;padding:.08rem .5rem;border-radius:.35rem;background:var(--violet);color:#160b33;font-size:.7rem;font-weight:900;letter-spacing:.1em;vertical-align:middle}
+.recent{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.7rem 1.4rem 1rem}
+.recent .label{font-size:.68rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-right:.2rem}
+.recent #recent{display:contents}
+.recent button{border:1px solid var(--line);border-radius:999px;background:var(--panel);padding:.22rem .7rem;font-size:.76rem;cursor:pointer;max-width:22rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recent button .t{color:var(--dim);margin-right:.35rem}
+.recent button.done,.recent button.approved{border-color:rgba(52,211,153,.55)}
+.recent button.held{border-color:rgba(251,191,36,.6)}
+.recent button.blocked,.recent button.failed,.recent button.error{border-color:rgba(251,113,133,.6)}
+.recent .keys{margin-left:auto;color:var(--dim);font-size:.72rem}
+
+@media (max-width:1000px){
+  .stage{grid-template-columns:minmax(0,1fr)}
+  .steps{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .groups,.token,.links{display:none}
+  .step::after{display:none}
+  .step{min-height:0}
+  .caption .main{font-size:1.2rem}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* ?record, inside the Live page's recording mode: that page says each step in one large caption
+   and shows the menu, so this one keeps only the agents and Porch's seven steps. */
+html.record header.top, html.record nav.recent, html.record section.caption,
+html.record .stage > aside[aria-labelledby="devices-title"]{display:none!important}
+html.record .stage{grid-template-columns:minmax(11rem,26%) minmax(0,1fr)}
+</style>
+<script>if (new URLSearchParams(location.search).has("record")) document.documentElement.classList.add("record");</script>
+</head>
+<body>
+<header class="top">
+  <porch-nav></porch-nav>
+  <div>
+    <h1>How a request moves through Porch</h1>
+    <p class="sub">Live. Agents never sign in to Google, LG, Ring or Matter: they ask Porch, and every request
+      passes the household's checks before the hub touches a device.</p>
+  </div>
+  <div class="pills">
+    <span class="pill" id="hub-pill"><span class="dot"></span>Device hub</span>
+    <span class="pill" id="gateway-pill"><span class="dot"></span>Porch gateway</span>
+    <span class="pill" id="protection-pill"><span class="dot"></span><span class="t">Family protection</span></span>
+    <span class="pill" id="people-pill"><span class="dot"></span><span class="t">People</span></span>
+  </div>
+</header>
+
+<main class="stage" id="stage">
+  <svg class="links" id="links" aria-hidden="true"></svg>
+  <aside aria-labelledby="agents-title">
+    <h2 class="col-title" id="agents-title">Agents</h2>
+    <div id="agents"></div>
+  </aside>
+  <section class="path" aria-labelledby="path-title">
+    <h2 class="col-title" id="path-title" hidden>Porch</h2>
+    <div class="groups">
+      <div class="group">Porch gateway<span>The household's rules, for every agent</span></div>
+      <div class="group hub">Device hub<span>One door to every platform</span></div>
+    </div>
+    <ol class="steps" id="steps"></ol>
+  </section>
+  <aside aria-labelledby="devices-title">
+    <h2 class="col-title" id="devices-title">Devices</h2>
+    <div id="devices"></div>
+  </aside>
+  <div class="token" id="token" hidden aria-hidden="true"><span class="face"></span><span class="label"></span></div>
+</main>
+
+<section class="caption" aria-live="polite" aria-label="What is happening">
+  <div class="main" id="say"></div>
+  <div class="sub" id="say-sub"></div>
+</section>
+<nav class="recent" aria-label="Recent requests">
+  <span class="label">Recent</span><span id="recent"></span>
+  <span class="keys">R replays the last request · Space pauses · F full screen</span>
+</nav>
+
+<script>
+"use strict";
+// Text from the hub, the gateway and the agents is only ever set as text, never as markup.
+const $ = (id) => document.getElementById(id);
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined && text !== null) node.textContent = text;
+  return node;
+}
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const params = new URLSearchParams(location.search);
+const RECORD = params.has("record");  // inside the Live page's recording mode
+// A recording shows what happened, not how long a device took: those times change as Porch improves.
+const inMs = (ms) => (!RECORD && ms != null ? ` in ${ms} ms` : "");
+const GATEWAY_WS = params.get("engine") || `ws://${location.hostname}:8000/ws/stage`;
+const PACE = Math.min(4, Math.max(0.25, Number(params.get("pace")) || 1));  // ?pace=1.5 is slower
+const IDLE_AFTER_S = Math.max(5, Number(params.get("idle")) || 30);
+
+// The seven steps: Porch's three checks in the gateway, then the hub's four.
+const STEPS = [
+  { title: "Who is asking", idle: "Every agent has its own key. An unknown key is refused." },
+  { title: "What it may control", idle: "Each agent's rights and the home's rules: locks, water and the router only with the owner." },
+  { title: "Who is in the room", idle: "If someone else is in the device's room and the agent's own person is not, they decide, with their PIN." },
+  { title: "Family protection", idle: "A real device moves only if the owner always allows it, or opened a control window." },
+  { title: "Digital copy", idle: "A dry run on the hub's copy of the home predicts what will happen." },
+  { title: "Platform", idle: "The hub takes the best path: Matter on the home network first, the cloud as the fallback." },
+  { title: "Read back", idle: "Porch reads the device itself and compares it with the prediction." },
+];
+const NUM = ["①", "②", "③", "④", "⑤", "⑥", "⑦"];
+const PLATFORMS = [["matter", "Matter", "local"], ["google_home", "Google Home", "cloud"], ["lg_thinq", "LG ThinQ", "cloud"], ["ring", "Ring", "cloud"]];
+const PATH_WORDS = { matter: "Matter, on the home network", google_home: "Google Home, in the cloud",
+                     lg_thinq: "LG ThinQ, in the cloud", ring: "Ring, in the cloud", digital_copy: "the hub's digital copy (offline mode)" };
+const PATH_SHORT = { matter: "Matter · local", google_home: "Google Home · cloud", lg_thinq: "LG ThinQ · cloud", ring: "Ring · cloud",
+                     digital_copy: "Digital copy" };
+const VERBS = { On: "switch on", Off: "switch off", Toggle: "toggle", Play: "play", Pause: "pause", Start: "start", Stop: "stop",
+                GoHome: "send home", LockDoor: "lock", UnlockDoor: "unlock", Open: "open", Close: "close",
+                SetDelayStart: "set a delayed start on" };
+const verb = (command) => VERBS[command] || `send ${command} to`;
+
+const state = { devices: new Map(), rooms: [], places: {}, agents: [], household: null, protection: null, shown: new Map() };
+
+async function getJSON(path) {
+  const response = await fetch(path, { cache: "no-store" });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.json();
+}
+// The hub's refusals end with a command for the owner's terminal, its full path included: on a page
+// people watch (or record), the sentence before it says enough, and no path is shown.
+function plain(text) {
+  const cut = String(text || "").split(/,? or with: /)[0].trim();
+  return cut.replace(/(?:\/(?:Users|home)\/[^\s"']+\/)([\w.-]+)/g, "$1");
+}
+function sentence(text) { const t = plain(text); return t && !/[.!?]$/.test(t) ? `${t}.` : t; }
+function clock(at) { return new Date(at || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }); }
+function attr(device, cluster, name) { const c = device.clusters[cluster]; return c ? c.attributes[name] : undefined; }
+function setPill(id, tone, text) {
+  const pill = $(id);
+  pill.className = `pill ${tone}`;
+  if (text !== undefined) pill.querySelector(".t").textContent = text;
+}
+
+// ---- Words for what the hub reports
+
+function valueWords(key, value) {
+  if (key === "OnOff.OnOff") return value === true ? ["On", "on"] : value === false ? ["Off", "off"] : ["Unknown", "unknown"];
+  if (key === "MediaPlayback.CurrentState") return { Playing: ["Playing", "playing"], Paused: ["Paused", "paused"] }[value] || [String(value), String(value)];
+  if (key === "DoorLock.LockState") return value === "Locked" ? ["Locked", "locked"] : ["Unlocked", "unlocked"];
+  if (/State(Value)?$/.test(key) && typeof value === "string") {  // Running, Docked, Closed: a state, in words
+    const words = value.replace(/([a-z])([A-Z])/g, "$1 $2");
+    return [words, words.toLowerCase()];
+  }
+  const name = key.split(".").pop().replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+  return [`${name}: ${value}`, `${name} ${value}`];
+}
+function changeWords(changes) {
+  const entries = Object.entries(changes || {});
+  if (!entries.length) return ["No change", "It is already that way: nothing would change."];
+  const words = entries.slice(0, 2).map(([k, v]) => valueWords(k, v));
+  return [words.map((w) => w[0]).join(" · "), `It predicts ${words.map((w) => w[1]).join(", ")}.`];
+}
+function protectionWords(deviceId) {
+  const p = state.protection;
+  const name = (state.devices.get(deviceId) || {}).name || "this device";
+  if (!p || p.enforced === false) return ["Off on this hub", "Family protection is off on this hub."];
+  if (((p.always_allowed || {}).device_ids || []).includes(deviceId)) return ["Always allowed", `The owner always allows ${name}.`];
+  if (p.live_writes_enabled && (p.device_ids || []).includes(deviceId)) {
+    return ["Window open", `The owner opened a control window for ${name}${p.expires_at ? ` until ${clock(p.expires_at)}` : ""}.`];
+  }
+  return ["Passed", "Family protection let it through."];
+}
+function readout(device) {
+  if (!device.online) return ["OFFLINE", "off"];
+  const on = attr(device, "OnOff", "OnOff");
+  const mw = attr(device, "ElectricalPowerMeasurement", "ActivePower");
+  const watts = typeof mw === "number" ? ` · ${(mw / 1000).toFixed(mw >= 100000 ? 0 : 1)} W` : "";
+  switch (device.device_type) {
+    case "Doorbell": return ["READY", "ok"];
+    case "StickVacuumCleaner": case "RoboticVacuumCleaner": {
+      const s = attr(device, "RvcOperationalState", "OperationalState");
+      return { Docked: ["CHARGED", "ok"], Charging: ["CHARGING", "live"], Running: ["CLEANING", "live"],
+               SeekingCharger: ["GOING HOME", "live"] }[s] || ["STANDBY", "off"];
+    }
+    case "LaundryDryer": case "LaundryWasher": {
+      const s = attr(device, "OperationalState", "OperationalState");
+      return { Running: ["RUNNING", "live"], Paused: ["PAUSED", "warn"], Error: ["ERROR", "warn"] }[s] || ["STOPPED", "off"];
+    }
+    case "WaterLeakSensor": return attr(device, "BooleanState", "StateValue") === true ? ["LEAK", "warn"] : ["DRY", "ok"];
+    case "WaterValve": return attr(device, "ValveConfigurationAndControl", "CurrentState") === "Closed" ? ["CLOSED", "warn"] : ["OPEN", "ok"];
+    case "CastingVideoPlayer": {
+      const s = attr(device, "MediaPlayback", "CurrentState");
+      return { Playing: ["PLAYING", "live"], Paused: ["PAUSED", "warn"] }[s] || ["NOT PLAYING", "off"];
+    }
+    case "DoorLock": return attr(device, "DoorLock", "LockState") === "Locked" ? ["LOCKED", "ok"] : ["UNLOCKED", "warn"];
+  }
+  if (on === true) return [`ON${watts}`, device.device_type === "OnOffLight" ? "on" : "live"];
+  if (on === false) return ["OFF", "off"];
+  return ["?", "warn"];
+}
+
+// ---- The page's parts
+
+function agentKind(agent) {
+  if (agent.reads === "energy") return ["READS ENERGY", "energy"];
+  if (!(agent.scopes || []).length) return ["READS", "reads"];
+  return ["CONTROLS", "control"];
+}
+function agentRank(agent) {  // the people's own agents, then other agents that control, then readers
+  return agentKind(agent)[1] !== "control" ? 2 : agent.person ? 0 : 1;
+}
+function renderAgents() {
+  // Recording: only the agents people use, the ones that live in an app.
+  const sorted = [...state.agents].filter((a) => !RECORD || a.client).sort((a, b) => agentRank(a) - agentRank(b));
+  $("agents").replaceChildren(...(sorted.length ? sorted.map((agent) => {
+    const card = el("div", "agent");
+    card.dataset.id = agent.id;
+    const [word, kind] = agentKind(agent);
+    const person = state.household && state.household.people.find((p) => p.id === agent.person);
+    card.append(el("div", "name", agent.name), el("div", "for", `for ${person ? person.name : agent.acts_for}`));
+    if (agent.client) card.append(el("div", "app", `in ${agent.client}`));
+    if (kind === "control" && agent.devices != null) {  // the owner limited it to these devices
+      const names = agent.devices.map((id) => (state.devices.get(id) || {}).name || id);
+      card.append(el("div", "limit", names.length ? `may control only ${names.join(", ")}` : "may control no device"));
+    }
+    card.append(el("span", `kind ${kind}`, word));
+    return card;
+  }) : [el("p", "for", "The gateway lists no agents yet.")]));
+  focusAgent();
+}
+function renderSteps() {
+  $("steps").replaceChildren(...STEPS.map((step, i) => {
+    const item = el("li", "step idle");
+    const head = el("div", "head");
+    head.append(el("span", "num", String(i + 1)), el("span", "title", step.title));
+    item.append(head, el("div", "short", ""), el("div", "text", step.idle));
+    if (i === 5) {
+      const chips = el("div", "chips");
+      for (const [path, name, where] of PLATFORMS) {
+        const chip = el("div", "chip");
+        chip.dataset.path = path;
+        const count = [...state.devices.values()].filter((d) => (d.control_paths || []).includes(path)).length;
+        chip.append(el("b", "", name), el("span", "", count ? `${where} · ${count}` : where));
+        chips.append(chip);
+      }
+      item.append(chips);
+    }
+    return item;
+  }));
+}
+function renderDevices() {
+  const rooms = new Map(state.rooms.map((r) => [r.id, { name: r.name, devices: [] }]));
+  const loose = [];
+  for (const device of state.devices.values()) {
+    const room = rooms.get(state.places[device.id]);
+    (room ? room.devices : loose).push(device);
+  }
+  const parts = [];
+  const add = (name, devices) => {
+    if (!devices.length) return;
+    parts.push(el("div", "room", name));
+    for (const device of devices) {
+      const card = el("div", "device");
+      card.dataset.id = device.id;
+      // While a request for this device is being drawn, its card keeps the state it had, so the
+      // change appears when the drawing reaches the read-back, not before.
+      const live = readout(device);
+      const shown = held(device.id) && state.shown.has(device.id) ? state.shown.get(device.id) : live;
+      state.shown.set(device.id, shown);
+      const what = el("span", "what");
+      what.append(el("span", "name", device.name),
+                  el("span", "via", (device.control_paths || []).map((p) => (PATH_SHORT[p] || p).split(" · ")[0]).join(" · ")));
+      card.append(what, el("span", `state ${shown[1]}`, shown[0]));
+      parts.push(card);
+    }
+  };
+  for (const room of rooms.values()) add(room.name, room.devices);
+  add("Not on the plan", loose);
+  $("devices").replaceChildren(...(parts.length ? parts : [el("p", "for", "No devices yet.")]));
+  focusDevices();
+}
+function renderPills() {
+  const p = state.protection;
+  if (!p) setPill("protection-pill", "", "Family protection: unknown");
+  else if (p.enforced === false) setPill("protection-pill", "warn", "Family protection off");
+  else {
+    const always = ((p.always_allowed || {}).device_ids || []).length;
+    const parts = ["Family protection on"];
+    if (p.live_writes_enabled) parts.push(`window open${p.expires_at ? ` until ${clock(p.expires_at)}` : ""}`);
+    if (always) parts.push(`${always} always allowed`);
+    setPill("protection-pill", "ok", parts.join(" · "));
+  }
+  const people = (state.household || {}).people || [];
+  setPill("people-pill", people.length ? "ok" : "", people.length ? people.map((person) => `${person.name}: ${
+    person.where === "home" ? (person.room_name || "home") : person.where === "away" ? "away" : "not set"}`).join(" · ") : "No household");
+}
+
+// ---- Requests: the gateway's flow events become beats, played one after another
+
+const flows = new Map();
+const order = [];
+const queue = [];
+const pending = new Map();  // device id -> when a request for it started being drawn
+let current = null, playing = false, paused = false, lastBeatAt = 0;
+
+function held(deviceId) {
+  const since = pending.get(deviceId);
+  return since !== undefined && Date.now() - since < 45000;
+}
+function flowOf(id) {
+  let flow = flows.get(id);
+  if (!flow) {
+    flow = { id, beats: [], steps: STEPS.map(() => ({ state: "idle", short: "", text: "" })), chips: new Set(), at: "agent", tone: "" };
+    flows.set(id, flow);
+    order.push(id);
+    while (order.length > 40) flows.delete(order.shift());
+  }
+  return flow;
+}
+function agentName(flow) { return (flow.agent || {}).name || "An agent"; }
+function deviceName(flow) { return (flow.device || {}).name || "the device"; }
+const beat = (fields) => ({ dwell: 1.6, ...fields });
+function stepBeat(i, step, sub) {
+  const text = sentence(step.text);
+  const say = step.state === "skip" ? null : [`${NUM[i]} ${STEPS[i].title} — ${text}`, sub || null];
+  return beat({ set: [[i, step.state, step.short, text]], token: i, say, dwell: step.state === "skip" ? 0.6 : 1.6 });
+}
+function heldStep(steps) { const i = steps.findIndex((s) => s.state === "wait"); return i < 0 ? 2 : i; }
+function stopStep(steps) { const i = steps.findIndex((s) => s.state === "stop"); return i < 0 ? 1 : i; }
+
+function beatsFor(flow, e) {
+  const name = agentName(flow);
+  switch (e.phase) {
+    case "ask": {
+      if (e.tool === "request_action") {
+        return [beat({ start: true, token: "agent", dwell: 2.4,
+          say: [`${name} asks Porch to ${verb(e.command)} ${deviceName(flow)}.`,
+                e.approval_id ? `It comes back with approval ${e.approval_id}.` : e.reason ? `${name}'s reason: “${e.reason}”` : null] })];
+      }
+      if (e.tool === "preview_action") {
+        return [beat({ start: true, token: "agent", dwell: 2.2,
+          say: [`${name} asks Porch for a preview: ${verb(e.command)} ${deviceName(flow)}?`, "A preview: nothing will be sent to the device."] })];
+      }
+      const what = { describe_home: "the whole home: every device, and what it may do with each",
+                     get_state: `${deviceName(flow)}, read now`, get_energy: "the home's energy readings" }[e.tool] || e.tool;
+      return [beat({ start: true, token: "agent", dwell: 1.8, say: [`${name} asks Porch for ${what}.`, null] })];
+    }
+    case "rules": {
+      // A preview the rules hold goes on to the dry run (would it work once approved?); anything
+      // refused, and anything an energy agent asks, ends here.
+      flow.closed = !(e.decision === "allow" || (e.preview && e.decision !== "deny" && (flow.agent || {}).reads !== "energy"));
+      const beats = e.steps.map((step, i) => stepBeat(i, step));
+      const who = e.waiting_for || "the owner";
+      if (e.decision === "allow") {
+        beats.push(beat({ token: 2, dwell: 1.4, say: [e.preview ? "Porch would let it through. The hub's digital copy answers next." : "Porch lets it through to the device hub.", null] }));
+      } else if (e.decision === "hold" || e.decision === "waiting") {
+        const ends = !e.preview || (flow.agent || {}).reads === "energy";
+        const answers = who === "the owner" ? "The owner answers on the Porch page, with the owner's PIN."
+                                            : `${who} answers on the Porch page, with ${who.includes(" or ") ? "their own PINs" : "their own PIN"}.`;
+        beats.push(beat({ tone: "held", token: heldStep(e.steps), skipFrom: ends ? 3 : undefined, dwell: 3, end: ends ? (e.preview ? "preview" : "held") : undefined,
+          say: [e.preview ? `Porch would hold it until ${who} says yes.` : `Porch holds it: ${who} must say yes. ${name} waits.`, answers] }));
+      } else {
+        const ends = true;  // refused: not even a preview goes further
+        beats.push(beat({ tone: "blocked", token: stopStep(e.steps), skipFrom: ends ? 3 : undefined, dwell: 3, end: ends ? (e.preview ? "preview" : "blocked") : undefined,
+          say: [e.preview ? "Porch would stop it here." : "Porch stops it here. Nothing reaches the device.",
+                `${name} is told why, and does not try another way to reach the device.`] }));
+      }
+      return beats;
+    }
+    case "dry_run": {
+      const device = (flow.device || {}).id;
+      const [protShort, protText] = protectionWords(device);
+      if (!e.ok) {
+        // Only a refusal that names family protection is one; any other failure says nothing about it.
+        const protection = /^Family protection/.test(e.reason || "");
+        const i = protection ? 3 : 4;
+        const set = protection ? [[3, "stop", "Closed", sentence(e.reason)]]
+                               : [[3, "skip", "Not checked", ""], [4, "stop", "Would not work", sentence(e.reason)]];
+        return [beat({ set, token: i, skipFrom: i + 1, tone: "blocked",
+          dwell: 3.2, end: e.preview ? "preview" : "blocked",
+          say: [protection ? `${NUM[3]} Family protection stops it: no control window is open for ${deviceName(flow)}.`
+                           : `${NUM[4]} The digital copy says it would not work.`, sentence(e.reason)] })];
+      }
+      const [changeShort, changeText] = changeWords(e.changes);
+      const beats = [stepBeat(3, { state: "ok", short: protShort, text: protText }),
+                     stepBeat(4, { state: "ok", short: changeShort, text: changeText })];
+      if (e.preview) {
+        beats.push(beat({ skipFrom: 5, token: 4, dwell: 2.6, end: "preview",
+          say: ["A preview: nothing was sent to the device.", `${name} can now tell ${(flow.agent || {}).acts_for || "its person"} what would happen, and why.`] }));
+      }
+      return beats;
+    }
+    case "sent": {
+      const words = PATH_WORDS[e.path] || e.path || "the platform";
+      const ok = e.status === "done";
+      return [beat({ set: [[5, ok ? "ok" : "stop", PATH_SHORT[e.path] || e.path || "?", ok ? `Sent through ${words}.` : `${words} did not confirm it: ${sentence(e.error) || "no answer."}`]],
+        chips: [e.path], token: 5, dwell: 2,
+        say: [`${NUM[5]} Platform: ${ok ? `sent through ${words}.` : `${words} did not confirm it.`}`,
+              ok ? `${name} never signed in to ${(PATH_SHORT[e.path] || "it").split(" · ")[0]}: Porch used the home's own connection.` : sentence(e.error)] })];
+    }
+    case "verified": {
+      const ok = e.verified;
+      const afterText = changeWords(e.after)[1];
+      const now = Object.keys(e.after || {}).length ? afterText.replace("It predicts ", "").replace(/\.$/, "") : "as predicted";
+      return [
+        beat({ set: [[6, ok ? "ok" : "stop", ok ? (RECORD ? "Verified" : `Verified · ${e.latency_ms} ms`) : "Does not match",
+                      ok ? `Porch read ${deviceName(flow)} back: ${now}, as predicted.` : "Porch read it back, and it does not match the prediction."]],
+               token: 6, tone: ok ? "done" : "blocked", dwell: 2.2, release: true,
+               say: [ok ? `${NUM[6]} Read back: ${deviceName(flow)} is ${now}. Verified${inMs(e.latency_ms)}.`
+                        : `${NUM[6]} Read back: it does not match what the digital copy predicted.`, null] }),
+        beat({ token: "device", tone: ok ? "done" : "blocked", dwell: 3, end: ok ? "done" : "failed",
+               say: [ok ? `Done. ${name} can tell ${(flow.agent || {}).acts_for || "its person"} it is done, and why it was allowed.`
+                        : `Not confirmed, so ${name} is told it is not done.`, null] }),
+      ];
+    }
+    case "read": {
+      const beats = e.steps.map((step, i) => stepBeat(i, step));
+      const n = (e.paths || []).length;
+      beats.push(beat({ set: [[3, "skip", "Nothing moves", "Reading moves nothing."], [4, "skip", "Nothing to predict", "Reading changes nothing."],
+                              [5, "ok", n ? `${n} platform${n === 1 ? "" : "s"}` : "The hub's view", e.what], [6, "skip", "Nothing to check", ""]],
+        chips: e.paths || [], flash: e.devices || [], token: 5, tone: "done", dwell: 3.2, end: "read",
+        say: [e.what, `${name} never signs in to Google, LG, Ring or Matter: Porch reads them for it.`] }));
+      return beats;
+    }
+    case "approval": {
+      const by = e.by || "Someone";
+      const i = flow.heldAt !== undefined ? flow.heldAt : by === "The owner" ? 1 : 2;
+      return [beat({ resume: true, set: [[i, e.approved ? "ok" : "stop", e.approved ? `${by} said yes` : `${by} said no`,
+                                         e.approved ? `${by} approved this exact request.` : `${by} declined it.`]],
+        token: i, tone: e.approved ? "done" : "blocked", dwell: 3, end: e.approved ? "approved" : "blocked",
+        say: [e.approved ? `${by} said yes, with ${by === "The owner" ? "the owner's" : "their own"} PIN.` : `${by} said no. Nothing happens to the device.`,
+              e.approved ? `${name} may now ask again with approval ${e.approval_id}: this exact request, once.` : null] })];
+    }
+    case "error":
+      return [beat({ tone: "blocked", dwell: 3, end: "error", say: ["Porch could not finish this request.", sentence(e.text)] })];
+  }
+  return [];
+}
+
+function onFlow(e) {
+  // A request already under way when the page opened is left out: its first part was never seen.
+  if (!flows.has(e.id) && e.phase !== "ask" && e.phase !== "approval") return;
+  const flow = flowOf(e.id);
+  if (e.phase === "ask") {
+    Object.assign(flow, { agent: e.agent, tool: e.tool, device: e.device, command: e.command, at0: e.at });
+    if (e.tool === "request_action" && e.device) pending.set(e.device.id, Date.now());
+    if (e.agent && !state.agents.some((a) => a.id === e.agent.id)) loadAgents();
+  }
+  if (e.phase === "rules" && (e.decision === "hold" || e.decision === "waiting")) flow.heldAt = heldStep(e.steps);
+  if (flow.closed && e.phase !== "approval") return;  // the drawing of this request has ended
+  if (e.phase === "approval" && !flow.agent) {  // held before this page was opened
+    const agent = state.agents.find((a) => a.id === e.agent_id);
+    const device = state.devices.get(e.device_id);
+    Object.assign(flow, { agent: agent || { id: e.agent_id, name: e.agent_id }, device: device ? { id: device.id, name: device.name } : null,
+                          command: e.command, tool: "request_action", at0: e.at });
+  }
+  const beats = beatsFor(flow, e);
+  flow.beats.push(...beats);
+  for (const b of beats) queue.push({ ...b, flow: flow.id });
+  play();
+}
+function replay(id) {
+  const flow = flows.get(id);
+  if (!flow || !flow.beats.length) return;
+  queue.length = 0;
+  for (const b of flow.beats) queue.push({ ...b, flow: flow.id, replay: true });
+  play();
+}
+async function play() {
+  if (playing) return;
+  playing = true;
+  while (queue.length) {
+    while (paused) await sleep(150);
+    const b = queue.shift();
+    show(b);
+    lastBeatAt = Date.now();
+    const backlog = queue.length > 8 ? 0.35 : queue.length > 3 ? 0.65 : 1;  // catch up when requests pile up
+    await sleep(b.dwell * 1000 * PACE * backlog);
+  }
+  playing = false;
+}
+
+function show(b) {
+  const flow = flows.get(b.flow);
+  if (!flow) return;
+  if (b.start) {
+    flow.steps = STEPS.map(() => ({ state: "idle", short: "", text: "" }));
+    flow.chips = new Set();
+    flow.flash = null;
+    flow.tone = "";
+  }
+  current = flow.id;
+  for (const [i, s, short, text] of b.set || []) flow.steps[i] = { state: s, short, text };
+  if (b.skipFrom !== undefined) {
+    for (let i = b.skipFrom; i < STEPS.length; i++) {
+      if (flow.steps[i].state === "idle") flow.steps[i] = { state: "skip", short: "Not reached", text: "" };
+    }
+  }
+  for (const path of b.chips || []) if (path) flow.chips.add(path);
+  if (b.flash) flow.flash = new Set(b.flash);
+  if (b.token !== undefined) flow.at = b.token;
+  if (b.tone !== undefined) flow.tone = b.tone;
+  if ((b.release || b.end) && !b.replay && flow.device && pending.has(flow.device.id)) {
+    pending.delete(flow.device.id);
+    renderDevices();
+  }
+  if (b.end && !b.replay) {
+    flow.outcome = b.end;
+    addRecent(flow);
+  }
+  renderFlow(flow);
+  say(b.say, b.replay);
+  if (b.say) tellLive(b.say, flow);
+}
+
+// Recording inside the Live page: it shows this page's words in one large caption, so it gets
+// each sentence as it is said, with the agent and how the request is going.
+function tellLive(words, flow) {
+  if (!RECORD || window.parent === window) return;
+  const agent = flow && flow.agent ? { name: flow.agent.name, client: flow.agent.client } : null;
+  window.parent.postMessage({ type: "porch-caption", say: words[0] || "", sub: words[1] || "",
+                              tone: flow ? flow.tone || "" : "idle", agent }, location.origin);
+}
+
+function say(words, replayed) {
+  if (!words) return;
+  const main = $("say");
+  main.replaceChildren();
+  if (replayed) main.append(el("span", "replay", "REPLAY"));
+  main.append(document.createTextNode(words[0] || ""));
+  $("say-sub").textContent = words[1] || "";
+}
+function idleWords() {
+  const names = [...state.agents].sort((a, b) => agentRank(a) - agentRank(b)).filter((a) => agentRank(a) === 0).slice(0, 3).map((a) => a.name);
+  const words = ["Waiting for an agent.", `${names.length ? `Ask ${names.join(", ").replace(/, ([^,]*)$/, " or $1")}` : "Ask an agent"} to do something in the home: every request appears here, check by check.`];
+  say(words);
+  tellLive(words, null);
+}
+function goIdle() {
+  current = null;
+  $("stage").classList.remove("busy");
+  [...$("steps").children].forEach((item, i) => {
+    item.className = "step idle";
+    item.querySelector(".short").textContent = "";
+    item.querySelector(".text").textContent = STEPS[i].idle;
+  });
+  document.querySelectorAll(".chip").forEach((chip) => { chip.className = "chip"; });
+  $("token").hidden = true;
+  $("links").replaceChildren();
+  focusAgent();
+  focusDevices();
+  idleWords();
+}
+// A request held for someone stays in view while they decide; anything else gives way after a while.
+setInterval(() => {
+  const flow = current && flows.get(current);
+  const wait = flow && flow.outcome === "held" ? Math.max(180, IDLE_AFTER_S) : IDLE_AFTER_S;
+  if (flow && !playing && Date.now() - lastBeatAt > wait * 1000) goIdle();
+}, 1000);
+
+function renderFlow(flow) {
+  $("stage").classList.add("busy");
+  [...$("steps").children].forEach((item, i) => {
+    const step = flow.steps[i];
+    const active = step.state === "idle" && flow.at === i;
+    item.className = `step ${active ? "active" : step.state}`;
+    item.querySelector(".short").textContent = step.short || "";
+    item.querySelector(".text").textContent = step.state === "idle" ? STEPS[i].idle : step.text || "";
+  });
+  document.querySelectorAll(".chip").forEach((chip) => { chip.className = `chip${flow.chips.has(chip.dataset.path) ? " lit" : ""}`; });
+  focusAgent();
+  focusDevices();
+  requestAnimationFrame(() => { moveToken(flow); drawLinks(flow); });
+}
+function focusAgent() {
+  const flow = current && flows.get(current);
+  document.querySelectorAll(".agent").forEach((card) => card.classList.toggle("active", Boolean(flow && flow.agent && card.dataset.id === flow.agent.id)));
+}
+function focusDevices() {
+  const flow = current && flows.get(current);
+  const targets = flow ? (flow.flash || new Set(flow.device ? [flow.device.id] : [])) : new Set();
+  document.querySelectorAll(".device").forEach((card) => {
+    const target = targets.has(card.dataset.id);
+    card.className = `device${target ? ` target ${flow.tone || ""}` : ""}`;
+  });
+}
+
+// ---- The moving request and the lines to it
+
+function box(node) {
+  const base = $("stage").getBoundingClientRect();
+  const r = node.getBoundingClientRect();
+  return { left: r.left - base.left, top: r.top - base.top, right: r.right - base.left, bottom: r.bottom - base.top,
+           width: r.width, height: r.height, stageWidth: base.width };
+}
+function agentCard(flow) { return flow.agent ? document.querySelector(`.agent[data-id="${CSS.escape(flow.agent.id)}"]`) : null; }
+function deviceCard(flow) { return flow.device ? document.querySelector(`.device[data-id="${CSS.escape(flow.device.id)}"]`) : null; }
+function moveToken(flow) {
+  // The request rides under the step it is at. While the agent is still asking, it waits, unseen,
+  // under the first step; a new request starts there rather than sliding across from the last one.
+  const token = $("token");
+  const fresh = token.dataset.flow !== flow.id;
+  token.dataset.flow = flow.id;
+  const command = flow.command ? ` · ${flow.command}` : "";
+  token.querySelector(".face").textContent = agentName(flow).slice(0, 1).toUpperCase();
+  token.querySelector(".label").textContent = `${agentName(flow)} · ${flow.device ? flow.device.name : "the home"}${command}`;
+  token.className = `token ${flow.tone || ""}`;
+  token.hidden = false;
+  const width = token.offsetWidth, height = token.offsetHeight;
+  const steps = $("steps").children;
+  let x, y;
+  if (flow.at === "device" && deviceCard(flow)) {
+    const b = box(deviceCard(flow));
+    x = b.left - width - 10; y = b.top + (b.height - height) / 2;
+  } else {
+    const b = box(steps[typeof flow.at === "number" ? flow.at : 0]);
+    x = b.left + (b.width - width) / 2; y = b.bottom + 10;
+  }
+  const limit = box($("stage")).stageWidth - width - 4;
+  const place = `translate(${Math.max(4, Math.min(x, limit))}px, ${y}px)`;
+  if (fresh) {
+    token.style.transition = "none";
+    token.style.transform = place;
+    void token.offsetWidth;  // apply the jump before transitions come back
+    token.style.transition = "";
+  } else {
+    token.style.transform = place;
+  }
+  token.style.opacity = flow.at === "agent" ? "0" : "1";
+}
+function curve(a, b) {
+  const mid = (a[0] + b[0]) / 2;
+  return `M${a[0]},${a[1]} C${mid},${a[1]} ${mid},${b[1]} ${b[0]},${b[1]}`;
+}
+function drawLinks(flow) {
+  const svg = $("links");
+  const paths = [];
+  const steps = $("steps").children;
+  const level = (i) => { const n = box(steps[i].querySelector(".num")); return n.top + n.height / 2; };
+  const agent = agentCard(flow);
+  if (agent) {
+    const a = box(agent), s = box(steps[0]);
+    paths.push(curve([a.right, a.top + a.height / 2], [s.left, level(0)]));
+  }
+  const reached = flow.at === "device" || flow.at === 6 || flow.outcome === "done" || flow.outcome === "read";
+  const targets = flow.flash ? [...flow.flash] : flow.device ? [flow.device.id] : [];
+  if (reached) {
+    const from = 6;
+    const s = box(steps[from]);
+    for (const id of targets.slice(0, 12)) {
+      const card = document.querySelector(`.device[data-id="${CSS.escape(id)}"]`);
+      if (!card) continue;
+      const d = box(card);
+      paths.push(curve([s.right, level(from)], [d.left, d.top + d.height / 2]));
+    }
+  }
+  svg.replaceChildren(...paths.map((points) => {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", points);
+    path.setAttribute("class", flow.tone || "");
+    return path;
+  }));
+}
+window.addEventListener("resize", () => { const flow = current && flows.get(current); if (flow) { moveToken(flow); drawLinks(flow); } });
+
+// ---- Recent requests: each can be drawn again
+
+const OUTCOME = { done: "✓", approved: "✓", read: "✓", preview: "○", held: "…", blocked: "✕", failed: "✕", error: "✕" };
+function addRecent(flow) {
+  const list = $("recent");
+  const button = el("button", flow.outcome || "");
+  button.type = "button";
+  button.dataset.flow = flow.id;
+  const target = flow.device ? `${flow.device.name}${flow.command ? ` ${flow.command}` : ""}` : { describe_home: "the home", get_energy: "energy" }[flow.tool] || flow.tool;
+  button.append(el("span", "t", clock(flow.at0)), document.createTextNode(`${agentName(flow)} · ${target} ${OUTCOME[flow.outcome] || ""}`));
+  button.title = "Draw this request again";
+  button.addEventListener("click", () => replay(flow.id));
+  const before = [...list.children].find((b) => b.dataset.flow === flow.id);  // an answered hold: the same request
+  if (before) before.replaceWith(button); else list.prepend(button);
+  while (list.children.length > 8) list.lastChild.remove();
+}
+document.addEventListener("keydown", (event) => {
+  if (RECORD) return;  // the Live page around it owns the keys while recording
+  if (event.target.closest && event.target.closest("input, select, textarea, button, porch-nav")) return;
+  if (event.key === "r" || event.key === "R") { const last = [...order].reverse().find((id) => flows.get(id).outcome); if (last) replay(last); }
+  else if (event.key === " ") { event.preventDefault(); paused = !paused; }
+  else if (event.key === "f" || event.key === "F") { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); }
+});
+
+// ---- Feeds
+
+function follow(url, onOpen, onMessage, onClose) {
+  let retry = 1000;
+  const open = () => {
+    let socket;
+    try { socket = new WebSocket(url); } catch { onClose(); return; }
+    socket.addEventListener("open", () => { retry = 1000; onOpen(); });
+    socket.addEventListener("message", (m) => { let data; try { data = JSON.parse(m.data); } catch { return; } onMessage(data); });
+    socket.addEventListener("close", () => { onClose(); setTimeout(open, retry); retry = Math.min(retry * 2, 15000); });
+  };
+  open();
+}
+function onHub(event) {
+  const device = event.device_id && state.devices.get(event.device_id);
+  if (event.type === "state_changed" && device) { device.clusters = event.clusters; renderDevices(); }
+  else if (event.type === "online_changed" && device) { device.online = event.online; renderDevices(); }
+  else if (event.type === "household_changed") { state.household = event.data; renderPills(); renderAgents(); }
+  else if (event.type === "protection_changed") { loadProtection(); }
+  else if (event.type === "resync_required") { loadDevices(); }
+}
+
+async function loadDevices() {
+  const [devices, placed] = await Promise.all([getJSON("/devices"), getJSON("/home/places")]);
+  state.devices = new Map(devices.map((d) => [d.id, d]));
+  state.rooms = placed.rooms || [];
+  state.places = placed.devices || {};
+  renderDevices();
+  if (!current) renderSteps();
+}
+async function loadAgents() {
+  try { state.agents = await getJSON("/household/agents"); } catch { state.agents = []; }
+  renderAgents();
+  if (!current) idleWords();
+}
+async function loadHousehold() {
+  try { state.household = await getJSON("/household"); } catch { state.household = null; }
+  renderPills();
+}
+async function loadProtection() {
+  try { state.protection = await getJSON("/protection"); } catch { state.protection = null; }
+  renderPills();
+}
+
+(async () => {
+  renderSteps();
+  try { await loadDevices(); setPill("hub-pill", "ok"); } catch { setPill("hub-pill", "bad"); }
+  await Promise.all([loadHousehold(), loadAgents(), loadProtection()]);
+  goIdle();
+  follow(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/events`,
+         () => setPill("hub-pill", "ok"), onHub, () => setPill("hub-pill", "bad"));
+  follow(GATEWAY_WS, () => setPill("gateway-pill", "ok"), (message) => { if (message.type === "flow") onFlow(message); },
+         () => setPill("gateway-pill", "bad"));
+  setInterval(loadAgents, 30000);
+  setInterval(loadProtection, 30000);
+})();
+</script>
+</body>
+</html>

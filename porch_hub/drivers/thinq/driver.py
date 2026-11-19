@@ -131,18 +131,52 @@ class ThinQDriver(BaseDriver):
                 await self._refresh(appliance)
         return [self._to_device(a) for a in self._appliances.values()]
 
+    @staticmethod
+    def _clusters(appliance, status) -> Clusters:
+        """The appliance's state in the hub's model, plus what its own LG profile says it takes: for
+        laundry, whether a delayed start can be set to the minute or in whole hours only (agents read
+        this in describe_home rather than finding out from a refusal)."""
+        clusters = appliance.profile.to_clusters(status)
+        laundry = clusters.get(c.PORCH_LAUNDRY)
+        if laundry is not None:
+            spec = (appliance.properties or {}).get("timer", {}).get("relativeMinuteToStart")
+            laundry.attributes["DelayMinutesSettable"] = isinstance(spec, dict) and "w" in spec.get("mode", [])
+        return clusters
+
     async def read_state(self, device_id: str) -> Clusters:
         appliance = self._appliance(device_id)
         # Confirm from what LG just answered, not from the cache a push may have moved on.
         status = await self._refresh(appliance, raise_offline=True)
-        return appliance.profile.to_clusters(status)
+        return self._clusters(appliance, status)
+
+    async def details(self, device_id: str) -> list[dict[str, str]]:
+        """Everything LG reports for the appliance, read now: its whole status, not only the part
+        the hub's model uses."""
+        from ...details import rows_from, value_text
+
+        appliance = self._appliance(device_id)
+        raw = await self._cloud.get_status(appliance.lg_id)  # raises DeviceOffline
+        rows = [{"group": "Appliance", "name": "Name in LG ThinQ", "value": appliance.alias}]
+        for status in raw if isinstance(raw, list) else [raw]:
+            for row in rows_from("", status if isinstance(status, dict) else {}):
+                row["group"] = row["group"] or "Appliance"
+                rows.append(row)
+        units = {"Pm1": " µg/m³", "Pm2": " µg/m³", "Pm10": " µg/m³", "PM1": " µg/m³", "PM2": " µg/m³", "PM10": " µg/m³"}
+        for row in rows:
+            if row["name"] in units and row["value"].replace(".", "", 1).isdigit():
+                row["value"] += units[row["name"]]
+                if row["name"] in ("PM2", "Pm2"):
+                    row["name"] = "PM2.5"  # LG's name for fine dust is PM2
+        if not rows[1:]:
+            rows.append({"group": "Appliance", "name": "Status", "value": value_text(None)})
+        return rows
 
     async def send_command(self, device_id: str, command: str, params: dict[str, Any]) -> None:
         appliance = self._appliance(device_id)
         if command in START_COMMANDS:
             if not self._is_current(appliance):
                 await self._refresh(appliance, raise_offline=True)
-            self._check_start(appliance, appliance.profile.to_clusters(appliance.status))
+            self._check_start(appliance, self._clusters(appliance, appliance.status))
         payload = appliance.profile.to_payload(command, params)
         check_writable(appliance.properties, payload, appliance.alias)
 
@@ -241,7 +275,7 @@ class ThinQDriver(BaseDriver):
             raise DeviceNotFound(f"lg_thinq has no device {device_id!r}") from None
 
     def _to_device(self, appliance: _Appliance) -> Device:
-        clusters = appliance.profile.to_clusters(appliance.status) if appliance.status is not None else {}
+        clusters = self._clusters(appliance, appliance.status) if appliance.status is not None else {}
         return Device(
             id=appliance.porch_id, name=appliance.alias, room=appliance.room,
             device_type=appliance.profile.device_type, online=appliance.online,
@@ -277,7 +311,7 @@ class ThinQDriver(BaseDriver):
         status = {k: dict(v) if isinstance(v, dict) else v for k, v in appliance.status.items()}
         _merge(status, appliance.profile.select(message.get("report", {})))
         self._record(appliance, status)
-        self._publish_state(appliance.porch_id, appliance.profile.to_clusters(status))
+        self._publish_state(appliance.porch_id, self._clusters(appliance, status))
 
     def _on_connection_change(self, connected: bool) -> None:
         self._push_connected = connected
@@ -302,4 +336,4 @@ class ThinQDriver(BaseDriver):
                 log.warning("resync of %s failed: %s", appliance.porch_id, exc)
                 continue
             if appliance.status is not None:
-                self._publish_state(appliance.porch_id, appliance.profile.to_clusters(appliance.status))
+                self._publish_state(appliance.porch_id, self._clusters(appliance, appliance.status))

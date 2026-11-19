@@ -68,6 +68,7 @@ For Hermes, add an `mcp_servers` entry, as `deploy/hermes_profiles.sh` does.
 | unknown_load | any plug not mapped in the config | Off always allowed; on held for the owner |
 | entry | front door lock | Locking always allowed; unlocking held for the owner |
 | water_shutoff | main water valve | Held for the owner, except closing it while a leak is detected (any agent) |
+| network | the plug that powers the Wi-Fi router (mapped per device in the config) | On and Off both held for the owner: off takes the home offline |
 
 An owner approval covers one exact action by one agent, can be used once, and expires after 10 minutes. The agent retries with the approval id.
 

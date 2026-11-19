@@ -37,10 +37,10 @@ table{border-collapse:collapse;text-indent:0}
 .overflow-x-auto{overflow-x:auto}.overflow-y-auto{overflow-y:auto}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.whitespace-nowrap{white-space:nowrap}.break-all{word-break:break-all}
 .rounded-md{border-radius:.375rem}.rounded-lg{border-radius:.5rem}.rounded-xl{border-radius:.75rem}.rounded-full{border-radius:9999px}
 .border{border-width:1px}.border-t{border-top-width:1px}.border-b{border-bottom-width:1px}
-.border-slate-700{border-color:#334155}.border-slate-800{border-color:#1e293b}.border-amber-500\/30{border-color:rgba(245,158,11,.3)}.border-emerald-500\/30{border-color:rgba(16,185,129,.3)}.border-rose-500\/30{border-color:rgba(244,63,94,.3)}
+.border-slate-700{border-color:#334155}.border-slate-800{border-color:#1e293b}.border-amber-500\/30{border-color:rgba(245,158,11,.3)}.border-amber-500\/50{border-color:rgba(245,158,11,.5)}.border-emerald-500\/30{border-color:rgba(16,185,129,.3)}.border-rose-500\/30{border-color:rgba(244,63,94,.3)}
 .divide-y>:not(:last-child){border-bottom-width:1px}.divide-slate-800>:not(:last-child){border-color:#1e293b}
 .bg-slate-950{background-color:#020617}.bg-slate-950\/90{background-color:rgba(2,6,23,.9)}.bg-slate-900{background-color:#0f172a}.bg-slate-800{background-color:#1e293b}.bg-slate-700{background-color:#334155}.bg-slate-500{background-color:#64748b}
-.bg-sky-600{background-color:#0284c7}.bg-sky-500\/15{background-color:rgba(14,165,233,.15)}.bg-amber-500{background-color:#f59e0b}.bg-amber-500\/10{background-color:rgba(245,158,11,.1)}.bg-amber-500\/15{background-color:rgba(245,158,11,.15)}
+.bg-sky-600{background-color:#0284c7}.bg-sky-500\/15{background-color:rgba(14,165,233,.15)}.bg-amber-500{background-color:#f59e0b}.bg-amber-500\/10{background-color:rgba(245,158,11,.1)}.bg-amber-500\/15{background-color:rgba(245,158,11,.15)}.hover\:bg-amber-500\/20:hover{background-color:rgba(245,158,11,.2)}
 .bg-emerald-400{background-color:#34d399}.bg-emerald-500\/15{background-color:rgba(16,185,129,.15)}.bg-rose-500{background-color:#f43f5e}.bg-rose-500\/15{background-color:rgba(244,63,94,.15)}.bg-white{background-color:#fff}
 .text-white{color:#fff}.text-slate-100{color:#f1f5f9}.text-slate-200{color:#e2e8f0}.text-slate-300{color:#cbd5e1}.text-slate-400{color:#94a3b8}.text-slate-500{color:#64748b}
 .text-sky-300{color:#7dd3fc}.text-amber-300{color:#fcd34d}.text-emerald-300{color:#6ee7b7}.text-rose-300{color:#fda4af}
@@ -190,6 +190,7 @@ const PATHS = {
   matter: "Matter · local",
   google_home: "Google Home · cloud",
   lg_thinq: "LG ThinQ · cloud",
+  ring: "Ring · cloud",
 };
 const TONES = {
   good: cls("font-mono text-emerald-300"),
@@ -203,6 +204,7 @@ const VALUE_TONES = {
   Running: "info", Paused: "warn", Stopped: "plain", Error: "bad", Unknown: "warn",
   Open: "good", Closed: "warn", Transitioning: "info",
   Charging: "info", Docked: "plain", SeekingCharger: "info",
+  Playing: "info", Buffering: "info", NotPlaying: "plain", Active: "info", Standby: "plain", Inactive: "plain",
 };
 const MAX_LOG_ROWS = 200;
 const MAX_FEED_ROWS = 60;
@@ -309,10 +311,14 @@ function fillCard(article, device) {
   }
 
   const attributes = el("dl", "mt-3 space-y-1 text-sm");
+  // An attribute name that several clusters share (MeasuredValue for PM1, PM2.5 and PM10) says which.
+  const names = Object.values(device.clusters).flatMap((cluster) => Object.keys(cluster.attributes));
+  const shared = new Set(names.filter((name, i) => names.indexOf(name) !== i));
   for (const [clusterName, cluster] of Object.entries(device.clusters)) {
     for (const [name, value] of Object.entries(cluster.attributes)) {
       const row = el("div", "flex justify-between gap-3");
-      const label = el("dt", "truncate text-slate-400", name);
+      const short = clusterName.replace(/ConcentrationMeasurement$/, "").replace(/^Pm25$/, "Pm2.5");
+      const label = el("dt", "truncate text-slate-400", shared.has(name) ? `${name} · ${short}` : name);
       label.title = clusterName;
       row.append(label, el("dd", toneFor(clusterName, name, value), formatValue(name, value)));
       attributes.append(row);
@@ -395,6 +401,9 @@ function renderPresets() {
     ["DoorLock", "LockDoor", "Lock door"], ["DoorLock", "UnlockDoor", "Unlock door"],
     ["LaundryDryer", "Start", "Start dryer"], ["LaundryDryer", "SetDelayStart", "Dryer: start in 4 h", { hours: 4 }],
     ["OnOffPlug", "Toggle", "Toggle plug"], ["WaterValve", "Close", "Close water valve"],
+    ["OnOffLight", "On", "Light on"], ["OnOffLight", "Off", "Light off"],
+    ["AirPurifier", "On", "Purifier on"], ["AirPurifier", "Off", "Purifier off"],
+    ["CastingVideoPlayer", "Pause", "Pause TV"], ["CastingVideoPlayer", "Play", "Play TV"],
   ];
   const buttons = [];
   for (const [type, command, label, params] of presets) {
@@ -424,6 +433,21 @@ function showResult(tone, lines) {
   box.replaceChildren(...lines.map((line, i) => el("p", i ? cls("mt-1 text-xs break-all") : cls("font-medium"), line)));
 }
 
+// Family protection refused a command: say so, and offer the owner's control window for that
+// device (the panel behind the Family protection button in the menu, which asks for the PIN).
+const blockedByProtection = (reason) => /^(403: )?Family protection/.test(reason || "");
+function showProtectionRefusal(deviceId, command, reason) {
+  showResult("info", [`${command} was not sent`, reason.replace(/^403: /, "")]);
+  const open = el("button", cls("mt-2 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20"),
+                  "Open a control window for it");
+  open.type = "button";
+  open.addEventListener("click", () => {
+    const nav = document.querySelector("porch-nav");
+    if (nav && nav.openProtectionPanel) nav.openProtectionPanel([deviceId]);
+  });
+  $("result").append(open);
+}
+
 async function runCommand(deviceId, command, params, button) {
   const key = newKey();
   const device = state.devices.get(deviceId);
@@ -440,7 +464,8 @@ async function runCommand(deviceId, command, params, button) {
     ]);
     if (!state.socketOpen) addLogRow({ ...response, command, params, device_id: deviceId, at: new Date().toISOString(), replayed: false });
   } catch (error) {
-    showResult("bad", [`${command} was not run`, error.message]);
+    if (blockedByProtection(error.message)) showProtectionRefusal(deviceId, command, error.message);
+    else showResult("bad", [`${command} was not run`, error.message]);
   } finally {
     if (button) button.disabled = false;
   }
@@ -452,6 +477,7 @@ async function dryRun() {
   if (!deviceId || !command) return;
   try {
     const result = await api("POST", `/devices/${devicePath(deviceId)}/simulate`, { command, params: currentParams() });
+    if (!result.would_succeed && blockedByProtection(result.reason)) { showProtectionRefusal(deviceId, command, result.reason); return; }
     showResult(result.would_succeed ? "good" : "bad", [
       `Dry run: ${command} would ${result.would_succeed ? "succeed" : "fail"}`,
       `estimated ${result.estimated_latency_ms} ms via ${result.control_path || "no path"} · nothing was sent`,

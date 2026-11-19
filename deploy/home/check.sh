@@ -13,5 +13,7 @@ set -a
 # shellcheck disable=SC1091
 . "$CONF/home.env"
 set +a
+export PORCH_CONFIG_DIR="$CONF"
+export PORCH_OWNER_COMMAND="$REPO/deploy/home/owner.sh"
 export PORCH_GATEWAY_CONFIG="${PORCH_GATEWAY_CONFIG:-$CONF/porch_config.json}"
 exec "$REPO/porch_gateway/.venv/bin/python" "$REPO/deploy/home/check_home.py" "$@"

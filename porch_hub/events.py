@@ -17,7 +17,7 @@ from .models import Clusters, ControlPath, utcnow
 log = logging.getLogger(__name__)
 
 EventType = Literal["state_changed", "online_changed", "device_event", "command_executed", "command_simulated",
-                    "mode_changed"]
+                    "mode_changed", "protection_changed", "household_changed"]
 
 
 class DeviceEvent(BaseModel):

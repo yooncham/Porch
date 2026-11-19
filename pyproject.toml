@@ -14,6 +14,10 @@ dependencies = [
 dev = ["pytest>=8", "httpx>=0.27"]
 # LG's official SDK: ThinQ Connect REST plus MQTT push over AWS IoT Core.
 lg = ["thinqconnect>=1.0.14"]
+# Google Home through Google's Home MCP server. It also needs Node.js, for the sign-in bridge (npx mcp-remote).
+google = ["mcp>=2.3"]
+# Ring doorbells through Ring's partner API.
+ring = ["httpx>=0.27"]
 # engine_lite: the HW6 stand-in for the Porch Engine (an MCP server in front of the hub).
 engine = ["mcp>=2.3", "httpx>=0.27"]
 

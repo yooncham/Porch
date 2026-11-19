@@ -1,0 +1,15 @@
+Hi Yoonchan, here’s where the house stands.
+What I did
+
+* Office light: The desk lamp in your office is on, and Porch confirmed it by reading the plug back. I couldn’t make it “not too bright,” though. The lamp is on a smart plug, which can only switch it on or off. Porch can’t set brightness on anything. You’ll get whatever brightness the lamp itself is set to.
+* Front door: It was already locked. I read the lock directly and it reports “Locked,” so I didn’t send it anything.
+* Dryer: I set a 12-hour delayed start, which is the most the house rules allow. It should start around 1:15 AM, and Porch confirmed the dryer accepted the setting. Two caveats:
+   * I don’t know your electricity rates. I picked the latest start allowed because late night is usually the cheap period, but I haven’t checked your plan.
+   * Porch doesn’t know how long the cycle runs. Most cycles take an hour or two, so it should finish well before morning, but I can’t confirm that.
+ I tried 11 hours 45 minutes first, to start at 1:00 AM. The dryer doesn’t accept minutes remotely, only whole hours.
+
+What I couldn’t do
+
+* Living room heat: The only heater Porch shows is the space heater on a plug in the living room. The house has a safety rule that heaters can’t be turned on while nobody is home, and the home is set to “away.” Porch refused the request, so I didn’t try another way around it. You can turn it on once you’re back.
+
+Nothing is waiting on anyone’s approval.

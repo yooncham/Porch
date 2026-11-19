@@ -1,0 +1,14 @@
+2026-11-16 13:13:10,866 INFO httpx: HTTP Request: GET http://127.0.0.1:8002/household/agents "HTTP/1.1 200 OK"
+2026-11-16 13:13:41,440 INFO httpx: HTTP Request: GET http://127.0.0.1:8002/household/agents "HTTP/1.1 200 OK"
+[2m[PORCH READ    ] fresh-agent      describe_home  | 8 devices, with what this agent may do[0m
+2026-11-16 13:14:10,920 INFO httpx: HTTP Request: GET http://127.0.0.1:8002/household/agents "HTTP/1.1 200 OK"
+2026-11-16 13:14:41,392 INFO httpx: HTTP Request: GET http://127.0.0.1:8002/household/agents "HTTP/1.1 200 OK"
+2026-11-16 13:14:49,896 INFO porch_hub.router: done On on home-1/desk-lamp-plug via matter in 63 ms
+[32m[PORCH ALLOW   ][0m fresh-agent                 On home-1/desk-lamp-plug      | Low-risk device within the agent's scope.  verified=True  {'OnOff.OnOff': False} -> {'OnOff.OnOff': True}  (63 ms via matter)
+                            agent said: "Yoonchan asked for the office light on before he gets home in about an hour."
+2026-11-16 13:14:57,679 INFO porch_hub.drivers.thinq.driver: LG accepted SetDelayStart for home-1/laundry-dryer in 152 ms
+2026-11-16 13:14:58,535 INFO porch_hub.router: done SetDelayStart on home-1/laundry-dryer via lg_thinq in 1159 ms
+[32m[PORCH ALLOW   ][0m fresh-agent      SetDelayStart home-1/laundry-dryer       | Appliance action within household limits.  verified=True  {'PorchLaundryExtension.RelativeHourToStart': 0} -> {'PorchLaundryExtension.RelativeHourToStart': 12}  (1159 ms via lg_thinq)
+                            agent said: "Yoonchan asked for the full dryer to run overnight when electricity is cheaper; 12 hours puts the start around 1:15 AM."
+2026-11-16 13:15:11,427 INFO httpx: HTTP Request: GET http://127.0.0.1:8002/household/agents "HTTP/1.1 200 OK"
+2026-11-16 13:15:41,405 INFO httpx: HTTP Request: GET http://127.0.0.1:8002/household/agents "HTTP/1.1 200 OK"

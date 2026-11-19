@@ -65,3 +65,28 @@ def test_a_dry_run_that_would_fail_carries_its_reason():
         client.post("/devices/home-1/laundry-dryer/simulate", json={"command": "SetDelayStart", "params": {"hours": 20}})
         event = next_event(ws, "command_simulated")
     assert event["would_succeed"] is False and "from 0 to 19, not 20" in event["error"]
+
+
+def test_a_dry_run_refused_by_family_protection_says_so_for_the_stage_alert(tmp_path):
+    """The stage raises its "Family protection is on" alert from this event's reason."""
+    settings = Settings(confirm_timeout_s=0.3, family_protection=True, protection_path=tmp_path / "permission.json")
+    with TestClient(create_app(demo_home(simulate_latency=False).drivers, settings)) as client, \
+            client.websocket_connect("/ws/events") as ws:
+        client.post(f"/devices/{LOCK}/simulate", json={"command": "LockDoor"})
+        event = next_event(ws, "command_simulated")
+    assert event["would_succeed"] is False and event["error"].startswith("Family protection")
+    script = PAGE.read_text().split("<script>")[-1]
+    assert "/^Family protection/.test(event.error" in script and 'kind: "family_protection"' in script
+
+
+def test_stage_tiles_follow_the_home():
+    """A home without a lock shows no lock tile, lights get tiles of their own, and scenes find devices by role."""
+    script = PAGE.read_text().split("<script>")[-1]
+    assert '{ key: "light", label: "Light", types: ["OnOffLight"], tiles: 2 }' in script
+    assert '{ key: "tv", label: "TV", types: ["CastingVideoPlayer"] }' in script
+    assert 'case "CastingVideoPlayer": {' in script and '["PAUSED", "warn"]' in script
+    assert '["NOT PLAYING", "plain"]' in script  # a TV nobody is using is not "unknown"
+    assert 'params.get("only")' in script and "Not in the registry" not in script
+    assert "roleDevice(ROLES[" not in script
+    for key in ("lock", "appliance", "leak", "valve", "plug"):
+        assert f'roleDevice("{key}")' in script

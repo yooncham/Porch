@@ -1,12 +1,14 @@
 """List what each live platform reports, with ready-to-edit bindings for the hub.
 
-Run it with the same environment as the hub (LG_THINQ_PAT, MATTER_SERVER_URL, PORCH_HOME_ID):
+Run it with the same environment as the hub (LG_THINQ_PAT, MATTER_SERVER_URL,
+GOOGLE_HOME_DIRECTORY, RING_AUTHORIZATION_FILE, PORCH_HOME_ID):
 
     .venv/bin/python -m porch_hub.discover
 
 It only reads: nothing is sent to any device, and the hub's LG client id file is reused, never
-replaced. Edit the printed LG_THINQ_BINDINGS and MATTER_BINDINGS so each id and room says what
-the device really is, put them in your env file, and restart the hub.
+replaced. Edit the printed bindings (LG_THINQ_BINDINGS, MATTER_BINDINGS, GOOGLE_HOME_BINDINGS,
+RING_BINDINGS) so each id and room says what the device really is, put them in your env file,
+and restart the hub.
 """
 
 import asyncio
@@ -59,11 +61,16 @@ def _unique(porch_id: str, taken: set[str]) -> str:
 
 # LG ThinQ
 
-Bindings = dict[str, dict[str, str]]
+Bindings = dict[str, dict[str, Any]]
 
 
-def parse_bindings(env: Mapping[str, str], name: str) -> tuple[Bindings, str | None]:
-    """The bindings already in the env file, and a problem with them if there is one."""
+def parse_bindings(env: Mapping[str, str], name: str,
+                   default_room: str | None = DEFAULT_ROOM) -> tuple[Bindings, str | None]:
+    """The bindings already in the env file, and a problem with them if there is one.
+
+    default_room=None leaves a binding without a room as it is, for a platform that has rooms of
+    its own (Google Home).
+    """
     raw = env.get(name, "").strip()
     if not raw:
         return {}, None
@@ -73,8 +80,16 @@ def parse_bindings(env: Mapping[str, str], name: str) -> tuple[Bindings, str | N
         return {}, f"{name} is not valid JSON ({exc}); suggesting ids as if it were empty"
     if not isinstance(value, dict) or not all(isinstance(b, dict) and "porch_id" in b for b in value.values()):
         return {}, f'{name} must look like {{"<id>": {{"porch_id": "...", "room": "..."}}}}; ignoring it'
-    return {key: {"porch_id": str(b["porch_id"]), "room": str(b.get("room", DEFAULT_ROOM))}
-            for key, b in value.items()}, None
+    bindings: Bindings = {}
+    for key, b in value.items():
+        bindings[key] = {"porch_id": str(b["porch_id"])}
+        if (room := b.get("room", default_room)) is not None:
+            bindings[key]["room"] = str(room)
+        if b.get("read_only") is True:  # kept, so pasting the printed bindings back never drops it
+            bindings[key]["read_only"] = True
+        if isinstance(b.get("name"), str) and b["name"].strip():
+            bindings[key]["name"] = b["name"].strip()
+    return bindings, None
 
 
 @dataclass(frozen=True)
@@ -138,7 +153,8 @@ def _declared_types(attributes: dict[str, Any], endpoint: int) -> list[int]:
 
 
 def _matter_bindings(existing: Bindings | None) -> dict[str, MatterBinding]:
-    return {key: MatterBinding(b["porch_id"], b.get("room", DEFAULT_ROOM)) for key, b in (existing or {}).items()}
+    return {key: MatterBinding(b["porch_id"], b.get("room", DEFAULT_ROOM), b.get("read_only") is True, b.get("name"))
+            for key, b in (existing or {}).items()}
 
 
 def matter_endpoints(nodes: Sequence[dict[str, Any]], home_id: str,
@@ -192,7 +208,74 @@ def matter_bindings(nodes: Sequence[dict[str, Any]], home_id: str, existing: Bin
     return bindings
 
 
+# Google Home and Ring. Their rows come from the drivers themselves (GoogleRow, RingRow), so the
+# ids shown here are the ids the hub will use.
+
+def google_bindings(rows: Sequence[Any], home_id: str, existing: Bindings | None = None) -> Bindings:
+    """The bindings to keep: existing ones as they are, plus a suggestion for each new light or plug.
+
+    A suggestion takes Google's own room. A binding without a room keeps following Google's.
+    """
+    existing = existing or {}
+    bindings: Bindings = {}
+    taken = {b["porch_id"] for b in existing.values()}
+    for row in rows:
+        if row.porch_id is None:
+            continue  # a kind the hub leaves out gets no binding
+        if row.google_id in existing:
+            bindings[row.google_id] = dict(existing[row.google_id])
+        else:
+            bindings[row.google_id] = {"porch_id": _unique(f"{home_id}/{_slug(row.name, 'device')}", taken),
+                                       "room": row.room or DEFAULT_ROOM}
+    for key, binding in existing.items():  # a device Google does not list right now keeps its binding
+        bindings.setdefault(key, dict(binding))
+    return bindings
+
+
+def ring_bindings(rows: Sequence[Any], home_id: str, existing: Bindings | None = None) -> Bindings:
+    """The bindings to keep: existing ones as they are, plus a suggestion for each new doorbell."""
+    bindings = dict(existing or {})
+    taken = {b["porch_id"] for b in bindings.values()}
+    for row in rows:
+        if row.porch_id is not None and row.ring_id not in bindings:
+            bindings[row.ring_id] = {"porch_id": _unique(f"{home_id}/{_slug(row.name, 'doorbell')}", taken),
+                                     "room": DEFAULT_ROOM}
+    return bindings
+
+
+def lg_hint(error: str, country: str) -> str | None:
+    """What to check when LG answers that the call is not allowed (its codes 1305 and 1309)."""
+    if "(1305)" not in error and "(1309)" not in error:
+        return None
+    return (f"  Two things to check: LG_THINQ_COUNTRY (now {country}) must be the country of the LG account "
+            "the appliances are registered to, for example KR, and the token needs every scope listed in home.env.")
+
+
 # Reading the platforms
+
+async def fetch_google(env: Mapping[str, str]) -> list[Any]:
+    """Every device Google Home reports, as the Google driver sees it. Uses the saved sign-in; sends nothing."""
+    from .drivers.google_home.driver import google_home_driver_from_env
+
+    driver = google_home_driver_from_env(env)
+    await driver.start()
+    try:
+        return driver.rows()
+    finally:
+        await driver.stop()
+
+
+async def fetch_ring(env: Mapping[str, str]) -> list[Any]:
+    """Every device the linked Ring account reports, as the Ring driver sees it."""
+    from .drivers.ring import ring_driver_from_env
+
+    driver = ring_driver_from_env(env)
+    await driver.start()
+    try:
+        return driver.rows()
+    finally:
+        await driver.stop()
+
 
 async def fetch_lg(env: Mapping[str, str]) -> list[dict[str, Any]]:
     from .drivers.thinq.connect import DEFAULT_CLIENT_ID_FILE, ThinQConnectCloud, load_client_id
@@ -249,21 +332,45 @@ def matter_report(rows: Sequence[MatterEndpointRow]) -> list[str]:
                    for r in rows])
 
 
+def google_report(rows: Sequence[Any]) -> list[str]:
+    if not rows:
+        return ["  No devices in this Google Home."]
+    return _table(("Google device id", "Google's kind", "name", "room", "online", "hub id", "commands"),
+                  [(r.google_id, r.google_type, r.name, r.room or "-",
+                    "-" if r.online is None else "yes" if r.online else "no",
+                    r.porch_id or "not used: no mapping for this kind yet",
+                    "-" if r.porch_id is None else ", ".join(r.commands) or "read only")
+                   for r in rows])
+
+
+def ring_report(rows: Sequence[Any]) -> list[str]:
+    if not rows:
+        return ["  No devices on this Ring account."]
+    return _table(("Ring device id", "name", "online", "hub id"),
+                  [(r.ring_id, r.name, "yes" if r.online else "no",
+                    r.porch_id or "not used: only doorbells are listed") for r in rows])
+
+
 def env_line(name: str, bindings: dict[str, dict[str, str]]) -> str:
     return f"{name}='{json.dumps(bindings)}'"
+
+
+PLATFORM_SETTINGS = ("LG_THINQ_PAT", "MATTER_SERVER_URL", "GOOGLE_HOME_DIRECTORY", "RING_AUTHORIZATION_FILE")
 
 
 async def run(env: Mapping[str, str] = os.environ, out=None, matter_timeout_s: float = 10.0) -> int:
     out = out or sys.stdout
     home_id = env.get("PORCH_HOME_ID", "home-1")
-    if not env.get("LG_THINQ_PAT") and not env.get("MATTER_SERVER_URL"):
-        print("Set LG_THINQ_PAT, MATTER_SERVER_URL or both, the same way you start the hub.", file=sys.stderr)
+    if not any(env.get(name) for name in PLATFORM_SETTINGS):
+        print(f"Set at least one of {', '.join(PLATFORM_SETTINGS)}, the same way you start the hub.",
+              file=sys.stderr)
         return 2
     lines: list[str] = []
     env_lines: list[str] = []
     status = 0
     if env.get("LG_THINQ_PAT"):
-        lines.append(f"LG ThinQ (country {env.get('LG_THINQ_COUNTRY', 'US')})")
+        country = env.get("LG_THINQ_COUNTRY", "US")
+        lines.append(f"LG ThinQ (country {country})")
         existing, problem = parse_bindings(env, "LG_THINQ_BINDINGS")
         if problem:
             lines.append(f"  {problem}")
@@ -274,6 +381,8 @@ async def run(env: Mapping[str, str] = os.environ, out=None, matter_timeout_s: f
             status = 1
         except DriverError as exc:
             lines.append(f"  Could not list LG appliances: {exc}")
+            if hint := lg_hint(str(exc), country):
+                lines.append(hint)
             status = 1
         else:
             lines += lg_report(appliances, home_id, existing)
@@ -291,6 +400,35 @@ async def run(env: Mapping[str, str] = os.environ, out=None, matter_timeout_s: f
         else:
             lines += matter_report(matter_endpoints(nodes, home_id, existing))
             env_lines.append(env_line("MATTER_BINDINGS", matter_bindings(nodes, home_id, existing)))
+        lines.append("")
+    if env.get("GOOGLE_HOME_DIRECTORY"):
+        lines.append("Google Home (through Google's Home MCP server)")
+        existing, problem = parse_bindings(env, "GOOGLE_HOME_BINDINGS", default_room=None)
+        if problem:
+            lines.append(f"  {problem}")
+        try:
+            rows = await fetch_google({**env, "GOOGLE_HOME_BINDINGS": json.dumps(existing)})
+        except DriverError as exc:
+            lines.append(f"  Could not read Google Home: {exc}")
+            lines.append("  If the sign-in has expired, sign in again with: deploy/home/connect.sh google")
+            status = 1
+        else:
+            lines += google_report(rows)
+            env_lines.append(env_line("GOOGLE_HOME_BINDINGS", google_bindings(rows, home_id, existing)))
+        lines.append("")
+    if env.get("RING_AUTHORIZATION_FILE"):
+        lines.append("Ring (doorbells, read only)")
+        existing, problem = parse_bindings(env, "RING_BINDINGS")
+        if problem:
+            lines.append(f"  {problem}")
+        try:
+            rows = await fetch_ring({**env, "RING_BINDINGS": json.dumps(existing)})
+        except DriverError as exc:
+            lines.append(f"  Could not read Ring: {exc}")
+            status = 1
+        else:
+            lines += ring_report(rows)
+            env_lines.append(env_line("RING_BINDINGS", ring_bindings(rows, home_id, existing)))
         lines.append("")
     if env_lines:
         lines.append("Bindings for your env file. Yours are kept as they are; check the ids and rooms of new ones:")

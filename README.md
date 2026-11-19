@@ -8,8 +8,16 @@ platform it lives on.
 Engine ──HTTP──▶ api.py ──▶ CommandRouter ──▶ DeviceRegistry ──▶ BaseDriver
                              idempotency        merge, one          ├─ ThinQDriver   (lg_thinq)
                              read-back          path per device     ├─ GoogleHomeDriver (google_home)
-                             latency                                └─ MatterDriver  (matter)
+                             latency                                ├─ MatterDriver  (matter)
+                                                                    └─ RingDriver    (ring, read only)
 ```
+
+Google Home has two drivers: `GoogleHomeDriver` keeps the demo home's devices in memory, and
+`GoogleHomeMcpDriver` reaches a real home through Google's Home MCP server: lights are switched,
+plugs are read, and a TV is read and can be played and paused. A hub that runs real
+devices only also has family protection on: it sends nothing until the owner opens a short
+control window, from the **Family protection** button on every page (with the owner PIN) or from
+Terminal (`porch_hub/protection.py`, [Family protection](#family-protection)).
 
 New here? The [field guide](docs/FIELD_GUIDE.md) explains what each part does and walks
 through running the whole system step by step. To connect a real home's devices, follow
@@ -96,14 +104,32 @@ http://localhost:8000/docs.
 | --- | --- |
 | `GET /devices` | Every device, merged across platforms |
 | `GET /devices/{id}/state` | Live cluster state, read from the platform now. 503 if offline |
+| `GET /devices/{id}/details` | Everything each platform that reaches the device reports, read now, in plain words: one section per platform, rows of group, name and value. Serial numbers, network addresses and ids are left out |
 | `POST /devices/{id}/commands` | `{status, state_after, latency_ms, idempotency_key, error}` |
 | `POST /devices/{id}/simulate` | Dry run: `{simulated_state_after, would_succeed, estimated_latency_ms, control_path, reason}` |
 | `WS /events`, `WS /ws/events` | One JSON event per device change or command, from the moment of connecting |
 | `GET /` | The home page: every page, what each is for, and the hub's live status |
 | `GET /dashboard` | The live dashboard |
 | `GET /stage` | The projector display for live demos |
-| `GET /digital-twin` | The 2D floor plan: physical hardware beside its digital copy |
-| `GET /home-3d` | The home and its devices in 3D (Three.js), live from the event stream |
+| `GET /porch` | How Porch works: the agents, Porch's rules and the people at home, and the devices, live |
+| `GET /flow` | Live flow: each agent request drawn check by check as it moves through Porch, from the gateway's stage feed |
+| `GET /live` | The Live flow and the 3D home side by side (`?view=2d`: the floor plan), both live |
+| `POST /household/agents/{id}/devices` | The owner chooses the devices one agent may control: `{devices: [...] or null, pin}` |
+| `GET /agents.js` | The household's agents and their requests, live, for the digital twin and the 3D home |
+| `GET /household` | Who lives here and where each person is (set by hand) |
+| `POST /household/presence` | Mark where someone is: `{person, where, room, by, pin}`; needs that person's PIN or the owner's |
+| `POST /household/verify` | Whether a PIN is that person's (the gateway asks before taking a person's approval) |
+| `GET /home/places` | The floor plan's rooms and the room each device is in |
+| `GET /online` | Whether agents can reach Porch from the internet now, and which |
+| `GET /household/agents`, `GET /household/approvals`, `POST /household/approvals/{id}/{approve or decline}` | The gateway's agents and held requests, for the pages; an answer needs the PIN of the person it waits for |
+| `GET /digital-twin` | This home's floor plan with every device on it, live from the event stream |
+| `GET /home-3d` | The same home and its devices in 3D (Three.js), live from the event stream |
+| `GET /home/layout` | The home's plan the two twin pages draw: floors, rooms, fixtures, where devices sit |
+| `GET /details.js` | The "Everything the platform reports" panel the two twin pages show for the selected device |
+| `GET /home/energy` | What every plug draws now, its energy counter, and its recent power, for the pages' energy panel |
+| `GET /protection` | Family protection: whether it is enforced, and the open control window if any |
+| `POST /protection/window` | The owner opens a control window: `{device_ids, minutes, pin}`. 401 without the right PIN |
+| `POST /protection/close` | Closes the control window now. Needs no PIN: it can only make the home safer |
 | `GET`, `PUT /demo/offline-mode` | `{"enabled": true}` turns the offline backup on without restarting |
 | `POST /demo/devices/{id}/attributes` | Offline mode only: set a reading in the digital copy, for example a leak |
 
@@ -198,11 +224,13 @@ separate frontend server.
   idempotency key. Simulated (offline) commands and replays are tagged.
 - **Test controls:**
   - **Presets:** lock or unlock the door, start the dryer, delay it 4 hours, toggle the plug,
-    close the valve.
+    close the valve, switch a light or the purifier on and off. Only the ones this home has a
+    device for are shown.
   - **Form:** any device and any command it supports, with hours and minutes for
     `SetDelayStart`.
   - **Dry run:** the same command through `/simulate`.
   - Each command gets a new idempotency key.
+  - A command family protection refuses shows the reason and **Open a control window for it**.
 - **Offline switch:** a toggle for `DEMO_OFFLINE_MODE` (`PUT /demo/offline-mode`). The hub
   answers once running commands have finished. While offline, the leak sensor can be set wet or
   dry from the page to run the emergency scene.
@@ -217,54 +245,167 @@ to the URL to view the offline styling.
   `status`, `latency_ms`, `idempotency_key`, `simulated`, `replayed`, `error`, and the state
   after in `clusters`.
 - **`mode_changed`**: when offline mode switches, with `data: {"offline": true|false}`.
+- **`protection_changed`**: when a control window is opened or closed through the hub's routes,
+  with the same `data` as `GET /protection`.
 
 Requests rejected before running (404, 422, 409) produce no event.
 
 ## Digital twin
 
-http://localhost:8000/digital-twin is an SVG floor plan of the demo home with four zones, each
-device animated from live hub events:
+http://localhost:8000/digital-twin is the home's floor plan with every device on it, drawn as
+plain SVG from two things the hub serves: the home's plan (`GET /home/layout`) and its devices
+(`GET /devices`, then `/ws/events`). Nothing about one home is written into the page.
 
-| Zone | Device | Animation |
-| --- | --- | --- |
-| Entrance | Yale smart lock | Door swings ajar when unlocked; ring green when locked, red when unlocked; shield when a command is blocked |
-| Utility room | Leak sensor, shutoff valve | Puddle and ripples when wet; valve lever turns 90° when closed; water in the pipe stops flowing |
-| Laundry | LG dryer | Drum spins while running; delay-start countdown badge; energy indicator (high draw, off-peak scheduled, idle) |
-| Living room | Space heater on a smart plug | Heat glow while on; a safety-rule override badge when a household rule wins |
+- **The plan.** Each floor is drawn to scale with its rooms, stairs, counters and doors. A real
+  home describes itself in a JSON file named by `PORCH_HOME_LAYOUT`
+  (`deploy/home-layout.example.json` is a two-floor townhome to start from;
+  `porch_hub/layout.py` says what each field means). Without one the page draws the demo home,
+  whose plan and device places are in `porch_hub/layout.py` too.
+- **Where a device sits.** Where the plan's `placements` put it; else in the room whose name, or
+  one of its `matches`, equals the device's room in the hub; else in a tray beside the plan
+  ("Not on the plan:"), so no device is ever hidden. Things the hub does not list, such as a
+  dishwasher, can be drawn greyed as `extras`.
+- **Live.** Each device shows its name and state (On, Off, PM2.5, Locked, Running, Playing), a
+  light glows while it is on, and an offline device is dimmed. Changes arrive over `/ws/events`.
+- **Readings in plain words.** A device's panel shows its readings with a label and a unit
+  (Brightness 62%, White tone 2700 K, Filter left 99%, Voltage 121.1 V). The hub keeps Matter's
+  names and units; hover a label to see the hub's own name for it.
+- **Click a device** for its attributes and commands. A command is sent and read back like
+  everywhere else; tick **Dry run only** to ask what would happen and send nothing.
+- **Family protection.** A command the hub refuses shows why, with **Open a control window for
+  it**: the owner's panel opens with that device ticked.
+- **Energy.** A strip above the plan shows what every plug draws ([Energy](#energy)); a plug
+  that measures its load also shows its watts on the plan.
+- **Agents and Porch.** Above the plan, each of the household's agents that lives in an app
+  (`deploy/home/agent.sh set <id> --client "Claude Desktop"`, `ChatGPT`, `Claude phone app`, `Claude on the web`)
+  shows with that app and when it last called Porch, beside a Porch node with its checks. Each
+  request is drawn as it happens, from the gateway's stage feed: a line from the agent to Porch,
+  Porch's verdict in words (allowed, held for someone, refused, and why), then a line from Porch
+  to the device it reached, which lights up on the plan; a read fans out to every device it
+  covered. Steps are paced so a viewer can follow them (`?pace=2` slows them down).
+  `porch_hub/dashboard/agents.js` does this for both twins.
+- **Works with no internet**, like every page the hub serves.
 
-**Two layers.** The page shows **Physical**, **Digital copy**, or **Split** (side by side):
-- **Physical hardware** shows the state the hub confirmed by read-back.
-- **Digital copy** shows each dry run's prediction (`command_simulated`) until the real command
-  settles. For example, the copy's door swings open while the real door stays locked.
-- **Tags:** PREDICTED, CONFIRMED, and BLOCKED · NOT SENT mark what happened.
+## Energy
 
-**Engine pulses.** An AI Agent box and a Porch Engine box sit above the house:
-- **When a command is evaluated (a dry run),** a pulse runs from the agent, through the
-  Engine, to the device on the copy.
-- **When a command executes,** a green or red pulse runs from the Engine to the device on the
-  hardware.
-- **When a sensor fires,** a pulse runs from it up to the Engine.
+Both twin pages carry the same energy panel, `<porch-energy>` (`porch_hub/dashboard/energy.js`,
+fed by `GET /home/energy`): what every plug draws now, the home's total, each plug's own energy
+counter, what it used since the hub started, and a line showing how its power moved.
 
-**Clicks.** Clicking the lock, the valve or the heater sends a real command: a dry run first,
-then execute and read back.
+- **Readings, never estimates.** A device counts when it reports Matter's
+  `ElectricalPowerMeasurement.ActivePower` (milliwatts) or
+  `ElectricalEnergyMeasurement.CumulativeEnergyImported` (milliwatt-hours). Today that is an
+  energy-monitoring plug paired over Matter. The panel shows watts and kWh, and for a plug that
+  measures them (`RMSVoltage` in millivolts, `RMSCurrent` in milliamps) the volts it sees and
+  the amps it passes.
+- **A plug that reports no power is still listed**, with its switch and the reason. Google Home
+  reports only whether a plug is on, so a plug the hub reaches only that way has no number.
+- **Old readings are not passed on as current.** A device on two paths shows what the paths that
+  reach it now report: with its Matter link down, a plug shows its switch from Google Home and
+  no watts. And a plug that draws 20 W or more while neither its power nor its counter moves
+  for 45 minutes is marked stale: its last reading is greyed, with the time it stopped, and left
+  out of the total.
+- **History is in memory** (`porch_hub/energy.py`): each meter's power changes for the last six
+  hours, kept from the moment the hub starts whether or not a page is open. It is not a billing
+  record, and it starts empty after a restart.
+- Clicking a meter opens that device on the page.
 
-**Stage scenarios.** The Engine's side is scripted on the page, and the dry runs and commands
-are real:
-- **Simulate Water Leak:** the leak sensor goes wet, the Engine's emergency rule closes the
-  valve locally, and the hub confirms it. This needs offline demo mode, the only mode in which
-  the hub lets a reading be set (the panel has the switch).
-- **Simulate Lock Attack:** a prompt-injected unlock is dry-run, so the copy shows the door
-  opening. It's then blocked at the Engine, and an approval card appears as on the owner's
-  phone. Approve runs the real unlock; Deny keeps the door locked.
-- **Simulate Off-Peak Energy Shift:** Gemini's request is dry-run, allowed, and executed. The
-  dryer then counts down to its off-peak start.
-- **Agent conflict (heater):** a household rule settles energy versus comfort, and the heater
-  shows the override badge.
+## The household and its rules
 
-The floor plan is plain SVG and CSS, and the panels use Tailwind with the same offline
-styles as `/dashboard`.
+Porch knows who lives in the home (`porch_hub/household.py`) and, set by hand with a PIN, who is
+in which room. The gateway applies two household rules on top of its capability rules
+(`porch_gateway/household_rules.py`):
 
-Device roles are picked by type. Pin them with `?lock=<id>&leak=<id>&valve=<id>&appliance=<id>&heater=<id>`.
+- **The person in the room decides.** An agent acts for one person. If someone else is in the
+  room a device is in and the agent's own person is not, the request is held until someone in
+  the room approves with their PIN. Every page's top bar shows what waits, and answers it; so does
+  **How Porch works**. The owner's key cannot answer for them, and no agent can. A yes makes Porch
+  carry the request out at once, as the agent that asked. The owner's yes, with the owner PIN,
+  also lets that one command through family protection, once: the hub holds that pass only while
+  the request is carried out (`FamilyProtection.allow_once`). A request the rules allow but family
+  protection stops waits for the owner's yes the same way, rather than failing.
+- **Energy agents read.** An agent with `"reads": "energy"` sees energy readings only, has a
+  `get_energy` tool, and every request to act is refused.
+- **The devices each agent may control are the owner's choice.** On **How Porch works**, each
+  agent that controls has **Choose devices**: any device its rights allow (the default), or only
+  the devices ticked, saved with the owner PIN. The hub writes `agent-devices.json` beside the
+  gateway's settings, and the gateway reads it on every request
+  (`porch_gateway/device_grants.py`), so it applies at once. Any other device is refused:
+  "Muse may control only Living stand in this home, as the owner chose." Reads are not limited,
+  and Porch's rules, the household's and family protection still apply to the devices given. A
+  damaged file stops every action rather than guess. From the hub's computer:
+  `deploy/home/agent.sh devices muse home-1/living-stand` (`--any`, `--none`).
+
+`http://localhost:8000/porch` shows the whole of it live: the agents and what each may do, Porch's
+rules, who is where, requests waiting for an answer, what just happened, and the devices by
+platform. Agents on the Claude phone app or claude.ai reach Porch through the online door
+(`deploy/home/online.py`), described in docs/REAL_HOME.md.
+
+## Family protection
+
+A hub that runs real devices (`PORCH_REAL_DEVICES_ONLY=1`) sends nothing to a device until the
+owner opens a control window: named devices, for at most 30 minutes. A window covers On and Off,
+and Play and Pause for a TV; a window opened from a page names the ones its devices take.
+Reading always works. `PORCH_FAMILY_PROTECTION=0` turns it off.
+
+- **The button.** Next to **Pages** on every page: amber **FAMILY PROTECTION ON**, or green
+  **CONTROL WINDOW OPEN** with the time left and the devices. Clicking it opens a panel to open
+  a window (devices, minutes, owner PIN), to change the open one, or to close it.
+- **Always allowed.** The owner can name devices that take On and Off at any time, with no
+  window (`deploy/home/owner.sh always --device <id>`, taken back with `--none`). It is a
+  standing choice in its own file, set only on the hub's computer and never over HTTP, and
+  `GET /protection` and every page's label say which devices it covers.
+- **The owner PIN** is chosen once in Terminal on the hub's computer
+  (`deploy/home/owner.sh set-pin`). The hub keeps only a salted hash, in a file only the owner
+  can read. Five wrong PINs lock the route for a minute, then longer.
+- **Who can open a window.** Someone with the PIN on a hub page, or someone at the hub
+  computer's Terminal (`deploy/home/owner.sh allow --device <id>`). Agents have neither. Closing
+  needs no PIN.
+- **Where it is checked.** In the command router, at the start of a command and again right
+  before it is sent, and in the dry run, so the gateway can tell an agent before trying. A
+  refused command answers 403 and nothing is stored under its idempotency key.
+
+[docs/REAL_HOME.md](docs/REAL_HOME.md#family-protection) has the owner's steps.
+
+## Live flow
+
+http://localhost:8100/flow draws each agent request as it moves through Porch, at a pace a viewer
+can follow. The agent is on the left and the device on the right. Between them are Porch's three
+checks (who is asking, what it may control, who is in the room) and the hub's four steps (family
+protection, the digital copy's dry run, the platform that carries it, the read-back). Each step
+turns green, amber or red, with one plain sentence under the drawing. With nothing happening, the
+page is the architecture: every agent, every step, the four platforms and the devices by room.
+[docs/RECORDING.md](docs/RECORDING.md) is a shot list for the demo video.
+
+- **Sources:** the gateway's stage feed (`ws://<host>:8000/ws/stage`, or `?engine=`), whose `flow`
+  messages say what Porch did at each step (`porch_gateway/flow.py` lists them), and the hub's
+  `/ws/events` for the devices. A device's card changes when the drawing reaches the read-back,
+  not before.
+- **Keys:** **R** draws the last request again, marked REPLAY, and a click on one under Recent
+  draws that one. **Space** pauses, **F** is full screen, and `?pace=1.5` is slower.
+- **Nothing private:** the gateway sends no agent key, and the page shows no PIN and no file
+  path. A refusal's command for the owner's Terminal is cut off.
+- **Each agent's card** says the app it lives in and, when the owner limited it, the devices it
+  may control.
+
+http://localhost:8100/live puts the Live flow beside the 3D home (`?view=2d`: beside the floor
+plan), for recording: what Porch decides about a request on the right, and where it goes in the
+home on the left. Both follow the gateway live, and it passes `?engine=` and `?pace=` to both.
+Inside it, the 3D home and the floor plan drop their own side panels, and the menu is shown once.
+`/live?record` is the clean frame for the demo video: a slim PORCH bar, the two views without
+their headers, one large caption that says what the Live flow says as it says it, and title and
+end cards on **T** and **E** ([docs/RECORDING.md](docs/RECORDING.md)).
+
+A `flow` message, one per step:
+
+```json
+{"type": "flow", "id": "f-3b9e0c1a2d", "phase": "rules", "decision": "hold", "waiting_for": "Wife",
+ "approval_id": "fdf3aa", "steps": [{"key": "who", "title": "Who is asking", "state": "ok",
+ "short": "Dot, for Yoonchan", "text": "Porch knows Dot by its own key: it acts for Yoonchan."}, ...]}
+```
+
+`phase` is `ask`, `rules`, `dry_run`, `sent`, `verified`, `read`, `approval` or `error`; a step's
+`state` is `ok`, `wait`, `stop` or `skip`.
 
 ## Stage display
 
@@ -291,7 +432,15 @@ single scrolling column.
   in the Digital copy panel with no Engine change.
 - **The Engine's WebSocket:** agents, safety alerts and audit lines. Pass `?engine=ws://host:port/path`
   in the URL, or enter it in the presenter panel.
-- **Device roles** are picked by type. Pin them with `?lock=<id>&appliance=<id>&leak=<id>&plug=<id>&valve=<id>`.
+- **Device roles** are picked by type: lock, light, appliance, tv, leak, plug, valve. A role the
+  home has no device for gets no tile, and lights get up to two. Pin them with
+  `?lock=<id>&light=<id>,<id>&appliance=<id>&tv=<id>&leak=<id>&plug=<id>&valve=<id>`, and show
+  only some roles with `?only=light,appliance`.
+- **Family protection:** on a hub that enforces it, the menu shows "Family protection on" or the
+  open control window with its time left, on every page ([Family protection](#family-protection)).
+  On the stage, a dry run the hub refuses for that reason raises an alert, so the room sees that
+  nothing was sent; its **Open a control window** button opens the owner's panel for that device.
+  The stage also announces a window opening, changing and closing.
 
 **Engine to stage contract (proposed for Interface v0, one JSON message each):**
 
@@ -330,22 +479,37 @@ wet.
 
 ## 3D home twin
 
-http://localhost:8000/home-3d shows the demo home in 3D: seven rooms cut away at wall height,
-furniture, and a model for each device that shows its live state. The door lock's bolt moves,
-the leak sensor shows a puddle and an alarm ring, the valve handle turns and the water in the
-pipe stops, the lamp and the heater glow, the dryer drum spins, the robot vacuum leaves its dock
-and cleans the living room, and the purifier's fan turns.
+http://localhost:8000/home-3d shows the same home in 3D, built from the same plan as the digital
+twin (`GET /home/layout`): each floor's rooms cut away at wall height, floors side by side, with
+stairs, counters and doors in their doorways, and a model for each device that shows its live
+state. A stick vacuum stands on its charging stand, and the stand is empty while it is in use.
+A TV stands with its back to the nearest wall: its screen changes colour while it plays, shows
+two bars while it is paused and is dark in standby, and selecting it brings the camera round to
+the screen. A lamp lights the room around it, the purifier's fan turns and its ring shows the air
+quality, a plug's light is on while it passes power, the leak sensor shows a puddle and an alarm
+ring, the valve handle turns, the dryer drum spins, and the robot vacuum leaves its dock. A door
+lock takes the plan's door nearest to it: the bolt moves, and the door stands ajar while it is
+unlocked.
 
 - **Live.** It follows `/ws/events` like the other pages. A dry run (`command_simulated`) shows a
   blue ring and "dry run" on the device; a confirmed command shows a green ring with the
   read-back latency, and a failure a red one. The last five events are listed bottom left.
 - **Interactive.** Drag to orbit, scroll to zoom, click a device (or its label) to see all its
   attributes and send commands. Commands go through the same dry run, execute and read-back
-  as everywhere else.
+  as everywhere else. **Overview** and **Top** fit the whole home on the screen.
+- **Family protection.** A refused command shows why, with **Open a control window for it**.
+- **Energy.** The side panel shows the same energy panel as the 2D twin ([Energy](#energy)), and
+  a device that measures its load shows its watts on its tag.
+- **Agents and Porch.** The agents stand in a row above the house, with Porch between them and
+  the home. Each request travels as a beam from the agent to Porch and from Porch to the device,
+  which flashes; a caption at the bottom says what Porch decided and why. Same feed and pacing
+  as the 2D twin.
 - **Works with no internet.** Three.js r169 (MIT) is vendored in
   `porch_hub/dashboard/vendor/three/` and served by the hub at `/vendor/three/`.
-- **Other homes.** Devices are placed by type, and two plugs are told apart by name ("heater",
-  "lamp"). A device the scene has no model for appears as a labelled box in its room.
+- **Any home.** Devices stand where the plan places them, by the same rules as the digital twin;
+  one that fits no room stands in a row in front of the house. Models are picked by device type,
+  and a plug named "heater" or "lamp" gets that model. A type the scene has no model for appears
+  as a labelled box. Things the hub does not list (`extras`) are grey blocks.
 
 The approach follows [Clawblox](https://github.com/nacloos/clawblox)'s renderers: the server owns
 the state and streams it, and the browser only turns the latest state into a Three.js scene.
@@ -412,8 +576,9 @@ The merged record:
  "control_paths": ["matter", "google_home"], "serial_number": "YRD450-0042", "online": true, ...}
 ```
 
-- **`control_paths`** is ordered local first: Matter, then LG ThinQ, then Google Home. Path
-  names stay the Interface v0 values (`matter`, `google_home`, `lg_thinq`).
+- **`control_paths`** is ordered local first: Matter, then LG ThinQ, then Google Home, then
+  Ring. Path names stay the Interface v0 values (`matter`, `google_home`, `lg_thinq`), plus
+  `ring` for doorbells.
 - **`primary_control_path`** is the first path in that order that is reachable. It is local
   Matter while Matter is up. If Matter can't reach the device, the next cloud path takes over
   until Matter is back.
@@ -523,7 +688,9 @@ export MATTER_BINDINGS='{"1/1": {"porch_id": "home-1/front-door-lock", "room": "
 .venv/bin/uvicorn porch_hub.main:app
 ```
 
-The keys in `MATTER_BINDINGS` are `<node id>/<endpoint>`. An endpoint without a binding gets
+The keys in `MATTER_BINDINGS` are `<node id>/<endpoint>`. A binding may also give `"name"` (what
+the home calls the device; a node usually reports only its product name) and `"read_only": true`
+(the hub reads the device and never commands it). An endpoint without a binding gets
 the id `home-1/matter-<node>-<endpoint>` and the room `Unassigned`.
 
 | Matter cluster | Porch attribute | Commands | Device types |
@@ -572,7 +739,8 @@ from their name and the room `Unassigned`.
 | --- | --- | --- | --- |
 | Dryer, Washer | LaundryDryer, LaundryWasher | OperationalState, PorchLaundryExtension | Start, Stop, SetDelayStart |
 | Robot cleaner | RoboticVacuumCleaner | RvcOperationalState, PowerSource | Start, Pause, GoHome |
-| Air purifier | AirPurifier | OnOff, FanControl, AirQuality, Pm25ConcentrationMeasurement | On, Off |
+| Stick cleaner (CordZero) | StickVacuumCleaner | RvcOperationalState, RvcCleanMode, PowerSource | None: LG lets it be read only |
+| Air purifier | AirPurifier | OnOff, FanControl, AirQuality, Pm25ConcentrationMeasurement, and when LG reports them Pm1ConcentrationMeasurement, Pm10ConcentrationMeasurement and HepaFilterMonitoring (Condition: filter life left, in percent) | On, Off |
 
 - **Remote Start guard.** `Start` and `SetDelayStart` first check the appliance's
   `remoteControlEnabled` flag. If it is off, they fail with "Remote Control switch disabled on
@@ -609,6 +777,53 @@ from their name and the room `Unassigned`.
 Still to confirm on real appliances: LG's state and enum names, which vary by model; whether
 `STOP` stops or pauses a cycle; and whether setting a delay start also needs a Start.
 
+## Google Home
+
+`porch_hub/drivers/google_home/` reaches the devices in a Google Home through Google's Home MCP
+server (`home.googleapis.com/mcp`), signed in as the home's owner. It reads with
+`list_home_resources` and `list_home_states`, and sends with `run_home_actions`, which is
+offered only to the session that sends. Setting it up is in
+[docs/REAL_HOME.md](docs/REAL_HOME.md#google-home-no-pairing).
+
+| Google's kind | Porch type | Matter clusters | Commands |
+| --- | --- | --- | --- |
+| GoogleLightDevice | OnOffLight | OnOff, and when the light reports them LevelControl (CurrentLevel: brightness, 1 to 254) and ColorControl (ColorTemperatureMireds: its white tone), both read only | On, Off |
+| GooglePluginUnitDevice | OnOffPlug | OnOff | None: a plug says nothing about what it powers |
+| VideoRemoteControlDevice (a Google TV Streamer) | CastingVideoPlayer | MediaPlayback (CurrentState: Playing, Paused, NotPlaying, Buffering), PorchMediaExtension (ActivityState: Active, Standby, Inactive) | Play, Pause |
+
+- **Read only by choice.** A binding with `"read_only": true` lists and reads the device and
+  offers no command for it, whatever Google describes.
+- **Checked before sending.** A command is offered only while Google's own description of the
+  device lists it with no parameters at Google's lowest sensitivity level. Right before sending,
+  the driver asks Google again for that description and for the device's state. A device that
+  already reports what the command asks for is sent nothing.
+- **A TV.** Google files a TV's traits under a part of the device (`GoogleTvDevice/MediaPlayback`)
+  and marks them experimental. An action names that part as its `type`; Google does not confirm
+  one that names the device's own kind. The hub reads what the TV is playing and whether it is
+  in use.
+  Google also describes On and Off for it, but the TV does not report whether it is on, so the
+  hub could not confirm them and does not offer them. With nothing playing, Play and Pause are
+  refused before anything is sent. A TV nobody is using reports no activity at all, only that
+  nothing is playing, so `ActivityState` is `null` then and the pages say NOT PLAYING.
+- **Unknown stays unknown.** A state Google does not report, or reports in a word the hub does
+  not know, is `null`: never off, and never "not playing".
+- **No push.** The device list is read at most every 30 seconds, and a command is confirmed by
+  asking again until Google reports the new state, for up to 15 seconds.
+
+Checked on a real Google TV Streamer (2026-11-15): reading it while it plays and while nothing
+plays, and every check before sending (the sending session is offered the action tool, Google's
+description allows Pause, and a Pause with nothing playing is refused with nothing sent).
+
+**Play and Pause do not work on that TV yet.** Google accepted a Pause that named the TV's part
+and answered it with the TV's own status, `STATUS_ENUM_SUCCESS`. The TV went on playing, on
+screen and in Google's report: the hub's read-back still found it Playing after 15 seconds and
+answered `failed`, twice. Google's success is therefore not proof that the TV acted, which is
+why the hub reads back. A device that answers with any other status is treated as refusing, with no
+wait. Google's whole answer to the last action is kept for the owner in the settings folder
+(`google-home-last-action.json`, readable by the owner only). Against the tests' stand-in for
+Google both commands pass. Until a Pause is seen to work, list such a TV with `"read_only": true`
+in its binding: it shows what it is doing and offers no command.
+
 ## What is simulated
 
 Without an LG token or a Matter Server URL, all three drivers run on in-memory copies. The same copies serve as the
@@ -616,8 +831,9 @@ backup demo mode.
 
 - **LG ThinQ:** `FakeThinQCloud` uses LG's real JSON format, refuses starts when Remote Start
   is off, and sends MQTT reports. The demo home has a dryer, a robot vacuum and an air purifier.
-- **Google Home:** `GoogleHomeDriver` enforces Google's block on unlocking. Next step: an MCP
-  client for `home.googleapis.com/mcp`, polling `list_home_states`.
+- **Google Home:** `GoogleHomeDriver` enforces Google's block on unlocking. A real home is
+  reached by `GoogleHomeMcpDriver`, an MCP client of `home.googleapis.com/mcp`
+  ([Google Home](#google-home)); the tests drive it against `tests/fake_google_home_server.py`.
 - **Matter:** `MATTER_SERVER_URL` may be just `ws://host:5580`; the hub adds `/ws`. Without `MATTER_SERVER_URL`, `SimulatedMatterDriver` holds the demo lock, leak
   sensor, valve and lamp plug. The tests drive the real `MatterDriver` against
   `tests/fake_matter_server.py`, which speaks the server's protocol over a real WebSocket.

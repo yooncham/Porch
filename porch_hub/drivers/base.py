@@ -45,6 +45,8 @@ class BaseDriver(ABC):
     # cloud APIs poll more slowly and wait longer.
     read_back_interval_s: float | None = None
     read_back_timeout_s: float | None = None
+    # The longest one read or send may take on this platform. None uses the hub's driver timeout.
+    call_timeout_s: float | None = None
 
     def __init__(self) -> None:
         self._listeners: list[DriverListener] = []
@@ -78,6 +80,13 @@ class BaseDriver(ABC):
         from the device's last known clusters and what the driver already holds.
         Reachability is not this method's concern.
         """
+
+    async def details(self, device_id: str) -> list[dict[str, str]]:
+        """Everything this platform reports about the device, as rows of group, name and value
+        (porch_hub/details.py), read now. By default, the hub's own model of the device."""
+        from ..details import rows_from_clusters
+
+        return rows_from_clusters(await self.read_state(device_id))
 
     def add_listener(self, listener: DriverListener) -> None:
         self._listeners.append(listener)

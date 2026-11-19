@@ -87,14 +87,29 @@ class FakeThinQCloud:
                                 "battery": {"percent": {"type": "number", "mode": ["r"]}}}},
                   {"runState": {"currentState": "CHARGING"}, "battery": {"percent": 100}})
 
+    def add_stick_cleaner(self, lg_id: str, alias: str) -> None:
+        """A cordless stick vacuum: LG lets the hub read it and nothing else."""
+        levels = ("STANDBY", "WORKING", "CHARGING", "CHARGING_COMPLETE")
+        self._add(lg_id, "DEVICE_STICK_CLEANER", alias,
+                  {"property": {"runState": {"currentState": _enum(*levels, mode=("r",))},
+                                "stickCleanerJobMode": {"currentJobMode": _enum("OFF", "NORMAL", "HIGH", "TURBO", "MOP",
+                                                                                "AUTO", mode=("r",))},
+                                "battery": {"level": _enum("HIGH", "MID", "LOW", "WARNING", mode=("r",))}}},
+                  # On its stand and full, as LG reports it: no battery reading until it is in use.
+                  {"runState": {"currentState": "CHARGING_COMPLETE"}, "stickCleanerJobMode": {"currentJobMode": "OFF"}})
+
     def add_air_purifier(self, lg_id: str, alias: str) -> None:
         self._add(lg_id, "DEVICE_AIR_PURIFIER", alias,
                   {"property": {"operation": {"airPurifierOperationMode": _enum("POWER_ON", "POWER_OFF")},
                                 "airFlow": {"windStrength": _enum("LOW", "MID", "HIGH", "AUTO")},
-                                "airQualitySensor": {"PM2": {"type": "number", "mode": ["r"]}}}},
+                                "airQualitySensor": {"PM1": {"type": "number", "mode": ["r"]},
+                                                     "PM2": {"type": "number", "mode": ["r"]},
+                                                     "PM10": {"type": "number", "mode": ["r"]}},
+                                "filterInfo": {"filterRemainPercent": {"type": "number", "mode": ["r"]}}}},
                   {"operation": {"airPurifierOperationMode": "POWER_OFF"},
                    "airFlow": {"windStrength": "AUTO"},
-                   "airQualitySensor": {"PM2": 8, "totalPollutionLevel": "GOOD"}})
+                   "airQualitySensor": {"PM1": 6, "PM2": 8, "PM10": 11, "totalPollutionLevel": "GOOD"},
+                   "filterInfo": {"filterRemainPercent": 87}})
 
     def appliances(self) -> list[tuple[str, str, str, dict[str, Any] | list[dict[str, Any]]]]:
         """(LG id, device type, alias, status in LG's wire format) for each appliance. No I/O."""

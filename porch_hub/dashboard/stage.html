@@ -76,6 +76,10 @@ button{font:inherit;color:inherit;cursor:pointer}
 .alert.older .alert-title{font-size:1.1rem}.alert.older .alert-detail{margin:0 0 0 .6rem;font-size:1.1rem}
 .alert.older .alert-body{display:flex;flex-wrap:wrap;align-items:baseline}
 .alert.fresh{animation:arrive .5s ease-out}
+.alert-action{margin-top:.7rem;padding:.4rem 1.1rem;border:2px solid var(--warn);border-radius:.6rem;background:transparent;color:var(--warn);font:inherit;font-size:1.25rem;font-weight:800;cursor:pointer}
+.alert-action:hover{background:rgba(251,191,36,.18)}
+.alert-action:focus-visible{outline:3px solid var(--warn);outline-offset:3px}
+.alert.older .alert-action{display:none}
 @keyframes arrive{from{transform:translateY(-.6rem);opacity:.2}to{transform:none;opacity:1}}
 
 /* Main grid */
@@ -264,7 +268,7 @@ async function hub(method, path, body) {
   return data;
 }
 
-const PATH_LABELS = { matter: ["Matter · local", "local"], google_home: ["Google · cloud", "cloud"], lg_thinq: ["LG ThinQ · cloud", "cloud"] };
+const PATH_LABELS = { matter: ["Matter · local", "local"], google_home: ["Google · cloud", "cloud"], lg_thinq: ["LG ThinQ · cloud", "cloud"], ring: ["Ring · cloud", "cloud"] };
 
 // ---- State
 
@@ -279,20 +283,33 @@ const state = {
 
 // ---- Hardware mirror
 
+// One tile per role, two for lights. A role the home has no device for gets no tile.
+//   ?only=light,appliance     show these roles only
+//   ?light=<id>,<id>          pin a role to these devices, in this order (also ?lock=, ?plug=, ...)
 const ROLES = [
   { key: "lock", label: "Smart lock", types: ["DoorLock"] },
+  { key: "light", label: "Light", types: ["OnOffLight"], tiles: 2 },
   { key: "appliance", label: "LG appliance", types: ["LaundryDryer", "LaundryWasher", "RoboticVacuumCleaner", "AirPurifier"] },
+  { key: "tv", label: "TV", types: ["CastingVideoPlayer"] },
   { key: "leak", label: "Water leak sensor", types: ["WaterLeakSensor"] },
-  { key: "plug", label: "Smart plug", types: ["OnOffPlug", "OnOffLight"], prefer: /heater/i },
+  { key: "plug", label: "Smart plug", types: ["OnOffPlug"], prefer: /heater/i },
   { key: "valve", label: "Water valve", types: ["WaterValve"] },
 ];
+const ONLY_ROLES = (params.get("only") || "").split(",").filter(Boolean);
 
-function roleDevice(role) {
-  const pinned = params.get(role.key);
-  if (pinned && state.devices.has(pinned)) return state.devices.get(pinned);
+function roleDevices(role) {
+  const pinned = (params.get(role.key) || "").split(",").filter((id) => state.devices.has(id));
+  if (pinned.length) return pinned.map((id) => state.devices.get(id));
   const candidates = [...state.devices.values()].filter((d) => role.types.includes(d.device_type));
   candidates.sort((a, b) => role.types.indexOf(a.device_type) - role.types.indexOf(b.device_type));
-  return (role.prefer && candidates.find((d) => role.prefer.test(d.name))) || candidates[0];
+  const preferred = role.prefer && candidates.find((d) => role.prefer.test(d.name));
+  const ordered = preferred ? [preferred, ...candidates.filter((d) => d !== preferred)] : candidates;
+  return ordered.slice(0, role.tiles || 1);
+}
+
+// The one device a scripted scene acts on, by role key.
+function roleDevice(key) {
+  return roleDevices(ROLES.find((role) => role.key === key))[0];
 }
 
 function attr(device, cluster, name) {
@@ -315,6 +332,16 @@ function readout(device) {
       const valve = attr(device, "ValveConfigurationAndControl", "CurrentState");
       return valve === "Open" ? ["OPEN", "info"] : valve === "Closed" ? ["CLOSED", "warn"] : [String(valve || "UNKNOWN").toUpperCase(), "warn"];
     }
+    case "CastingVideoPlayer": {
+      // What it plays, unless it is in standby: then what it last played does not count. A TV
+      // nobody is using reports no activity at all, only that nothing is playing.
+      const activity = attr(device, "PorchMediaExtension", "ActivityState");
+      const playing = attr(device, "MediaPlayback", "CurrentState");
+      if (activity === "Standby") return ["STANDBY", "plain"];
+      return { Playing: ["PLAYING", "info"], Paused: ["PAUSED", "warn"], Buffering: ["BUFFERING", "info"] }[playing]
+        || { Active: ["IN USE", "info"], Inactive: ["IDLE", "plain"] }[activity]
+        || (playing === "NotPlaying" ? ["NOT PLAYING", "plain"] : ["UNKNOWN", "warn"]);
+    }
     case "OnOffPlug": case "OnOffLight": case "AirPurifier": {
       const on = attr(device, "OnOff", "OnOff");
       if (device.device_type !== "AirPurifier" || on !== undefined) return on === true ? ["ON", "info"] : on === false ? ["OFF", "plain"] : ["UNKNOWN", "warn"];
@@ -329,14 +356,10 @@ function readout(device) {
 }
 
 function renderTiles(changedId) {
-  const tiles = ROLES.map((role) => {
-    const device = roleDevice(role);
+  const roles = ONLY_ROLES.length ? ROLES.filter((role) => ONLY_ROLES.includes(role.key)) : ROLES;
+  const tiles = roles.flatMap((role) => roleDevices(role).map((device) => {
     const tile = el("article", "tile");
     tile.append(el("div", "tile-role", role.label));
-    if (!device) {
-      tile.append(el("div", "tile-state tone-plain", "—"), el("div", "tile-name", "Not in the registry"));
-      return tile;
-    }
     const [word, tone, alarm] = readout(device);
     if (alarm) tile.classList.add("alarm");
     if (!device.online) tile.classList.add("offline");
@@ -353,7 +376,13 @@ function renderTiles(changedId) {
     if (attr(device, "PorchLaundryExtension", "RemoteStartAllowed") === false) meta.append(el("span", "tag off", "REMOTE START OFF"));
     tile.append(meta);
     return tile;
-  });
+  }));
+  if (!tiles.length) {
+    const empty = el("article", "tile");
+    empty.append(el("div", "tile-role", "Hardware"), el("div", "tile-state tone-plain", "—"),
+                 el("div", "tile-name", "No device to show in the registry"));
+    tiles.push(empty);
+  }
   $("tiles").replaceChildren(...tiles);
   if (changedId) setTimeout(() => document.querySelectorAll(".tile.changed").forEach((t) => t.classList.remove("changed")), 1500);
 }
@@ -449,7 +478,7 @@ function renderPredictions() {
 
 // ---- Safety alerts
 
-const ALERT_TONES = { prompt_injection: "bad", emergency_override: "warn", arbitration: "violet" };
+const ALERT_TONES = { prompt_injection: "bad", emergency_override: "warn", arbitration: "violet", family_protection: "warn" };
 const ALERT_MARKS = { bad: "!", warn: "!", violet: "⇄", info: "i" };
 
 function showAlert(event) {
@@ -457,6 +486,17 @@ function showAlert(event) {
   const alert = el("div", `alert ${tone} fresh`);
   const body = el("div", "alert-body");
   body.append(el("div", "alert-title", event.title || event.kind), el("div", "alert-detail", event.detail || ""));
+  if (event.kind === "family_protection" && event.device_id) {
+    // The presenter can answer it right here: the panel behind the menu's Family protection
+    // button, with this device already ticked. It still asks for the owner PIN.
+    const open = el("button", "alert-action", "Open a control window");
+    open.type = "button";
+    open.addEventListener("click", () => {
+      const nav = document.querySelector("porch-nav");
+      if (nav && nav.openProtectionPanel) nav.openProtectionPanel([event.device_id]);
+    });
+    body.append(open);
+  }
   alert.append(el("span", "mark", ALERT_MARKS[tone]), body, el("span", "alert-time mono", clock(event.at)));
   const zone = $("alerts");
   zone.querySelectorAll(".alert").forEach((a) => a.classList.add("older"));
@@ -464,6 +504,25 @@ function showAlert(event) {
   while (zone.children.length > 3) zone.lastChild.remove();
   if (event.device_id && event.command) settlePrediction(event.device_id, event.command, "blocked", "stopped by Porch");
 }
+
+// The owner's control window (family protection). The menu script reads GET /protection and
+// reports it here; the stage announces the moment it opens and the moment it closes.
+let windowKey = null;  // unknown until the first report, so loading the page announces nothing
+document.addEventListener("porch:protection", (event) => {
+  const report = event.detail;
+  if (!report || !report.enforced) return;
+  // "" while protected, else the devices the window covers: a window that changes is news too.
+  const key = report.live_writes_enabled ? [...report.device_ids].sort().join("\n") : "";
+  if (windowKey !== null && key !== windowKey) {
+    const names = report.device_ids.map((id) => (state.devices.get(id) || {}).name || id).join(", ");
+    showAlert(key
+      ? { kind: "control_window", title: windowKey ? "Owner changed the control window" : "Owner opened a control window",
+          detail: `${names} can be switched until ${clock(report.expires_at)}. Everything else stays protected.` }
+      : { kind: "control_window", title: "Control window closed",
+          detail: "Family protection is on again. Nothing moves until the owner opens another." });
+  }
+  windowKey = key;
+});
 
 // ---- Audit stream
 
@@ -489,6 +548,7 @@ function addAudit({ at, summary, agentName, outcome, savings, hubLine }) {
 const VERBS = {
   LockDoor: "locked", UnlockDoor: "unlocked", Start: "started", Stop: "stopped", Pause: "paused", Resume: "resumed",
   On: "turned on", Off: "turned off", Toggle: "toggled", Open: "opened", Close: "closed", GoHome: "sent home",
+  Play: "playing",
 };
 
 function hubSummary(event, device) {
@@ -514,6 +574,13 @@ function onHubEvent(event) {
       break;
     case "command_simulated":
       addPrediction(event);
+      // The hub refuses a real command while the owner's control window is closed, and its dry
+      // run says so. This is the moment the room should see.
+      if (!event.would_succeed && /^Family protection/.test(event.error || "")) {
+        showAlert({ kind: "family_protection", at: event.at, device_id: event.device_id, title: "Family protection is on",
+                    detail: `${event.command} on ${device ? device.name : event.device_id} was not sent. `
+                            + "Nothing moves until the owner opens a control window." });
+      }
       break;
     case "command_executed":
       if (event.replayed) break;
@@ -655,7 +722,7 @@ const SCENES = [
     }
   } },
   { title: "Off-peak laundry", play: async () => {
-    const dryer = roleDevice(ROLES[1]);
+    const dryer = roleDevice("appliance");
     if (!dryer || !dryer.clusters.PorchLaundryExtension) return note("No LG washer or dryer in the registry.");
     engine({ type: "audit", agent_id: "gemini", summary: "Gemini Agent asked to move the LG dryer cycle to off-peak hours" });
     await dryRun(dryer, "SetDelayStart", { hours: 4 });
@@ -666,7 +733,7 @@ const SCENES = [
              savings_usd: result.status === "done" ? 1.4 : undefined });
   } },
   { title: "Prompt injection", play: async () => {
-    const lock = roleDevice(ROLES[0]);
+    const lock = roleDevice("lock");
     if (!lock) return note("No smart lock in the registry.");
     engine({ type: "audit", agent_id: "claude",
              summary: "Claude Agent asked to unlock the front door, following text in a delivery note" });
@@ -679,8 +746,8 @@ const SCENES = [
              summary: `Porch blocked the ${lock.name} unlock: the instruction came from a delivery note, not the owner. Asked the owner to approve.` });
   } },
   { title: "Leak emergency", play: async () => {
-    const leak = roleDevice(ROLES[2]);
-    const valve = roleDevice(ROLES[4]);
+    const leak = roleDevice("leak");
+    const valve = roleDevice("valve");
     if (!leak || !valve) return note("Needs a leak sensor and a water valve in the registry.");
     if (state.offline) {
       await hub("POST", `/demo/devices/${devicePath(leak.id)}/attributes`, { cluster: "BooleanState", attribute: "StateValue", value: true });
@@ -697,7 +764,7 @@ const SCENES = [
              summary: `Porch shut ${valve.name} ${elapsed} ms after the leak, without waiting for an agent` });
   } },
   { title: "Agent conflict", play: async () => {
-    const plug = roleDevice(ROLES[3]);
+    const plug = roleDevice("plug");
     if (!plug) return note("No smart plug in the registry.");
     engine({ type: "audit", agent_id: "gemini", summary: `Gemini Agent (energy) asked to turn ${plug.name} off to cut peak load` });
     engine({ type: "audit", agent_id: "claude", summary: `Claude Agent (comfort) asked to keep ${plug.name} on overnight` });

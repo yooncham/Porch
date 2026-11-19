@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Porch Works</title>
+<script src="/nav.js" defer></script>
+<style>
+/* How Porch works, live: the agents on one side, the home's devices on the other, and Porch in
+   between with its rules, the people at home, and the requests waiting for someone. No CDN, no
+   web font: the page works on a network with no internet. */
+:root{
+  --bg:#060a14;--panel:#0d1424;--panel-2:#111a2e;--line:#243049;
+  --text:#e6ebf5;--muted:#8a97b0;--dim:#5d6a84;
+  --on:#fbbf24;--live:#38bdf8;--ok:#34d399;--warn:#fbbf24;--bad:#fb7185;--violet:#a78bfa;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Apple SD Gothic Neo",sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text)}
+body{min-height:100vh;font-size:15px;line-height:1.45}
+[hidden]{display:none!important}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid #5eead4;outline-offset:2px}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem 1.2rem;padding:.8rem 1.2rem;border-bottom:1px solid var(--line)}
+.top h1{margin:0;font-size:1.25rem}
+.top .sub{margin:0;color:var(--muted);font-size:.85rem;max-width:60ch}
+.pills{margin-left:auto;display:flex;flex-wrap:wrap;gap:.5rem}
+.pill{display:inline-flex;align-items:center;gap:.4rem;padding:.25rem .7rem;border:1px solid var(--line);border-radius:999px;font-size:.78rem;font-weight:600;color:var(--muted)}
+.pill .dot{width:.5rem;height:.5rem;border-radius:50%;background:var(--dim)}
+.pill.ok .dot{background:var(--ok)}.pill.bad .dot{background:var(--bad)}
+
+.flow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) minmax(0,1fr);gap:1rem;padding:1rem 1.2rem 1.6rem}
+@media (max-width:1050px){.flow{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:1rem;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:.8rem;padding:.9rem 1rem}
+.card h2{margin:0 0 .15rem;font-size:.78rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.card .lead{margin:0 0 .7rem;color:var(--dim);font-size:.82rem}
+.arrow{display:none}
+@media (min-width:1051px){.col{position:relative}.col.porch::before,.col.porch::after{content:"→";position:absolute;top:2.2rem;font-size:1.4rem;color:var(--dim)}
+  .col.porch::before{left:-.9rem}.col.porch::after{right:-.9rem}}
+
+.agent,.device{border:1px solid var(--line);border-radius:.6rem;background:var(--panel-2);padding:.55rem .7rem;margin-top:.5rem;transition:border-color .3s,box-shadow .3s}
+.agent .row,.device .row{display:flex;align-items:baseline;gap:.5rem}
+.agent .name,.device .name{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agent .for,.device .room{color:var(--dim);font-size:.8rem;white-space:nowrap}
+.agent .may{margin-top:.15rem;font-size:.82rem;color:var(--muted)}
+.agent .last,.device .last{margin-top:.2rem;font-size:.78rem;color:var(--dim);min-height:1em}
+.agent .app{margin-top:.1rem;font-size:.78rem;color:var(--dim)}
+.agent .grant{margin-top:.3rem;display:flex;flex-wrap:wrap;align-items:center;gap:.3rem .6rem;font-size:.82rem;color:var(--muted)}
+.agent .grant.limited{color:var(--violet)}.agent .grant.bad{color:var(--bad)}
+.btn.small{padding:.1rem .55rem;font-size:.75rem}
+.grant-form{display:grid;gap:.45rem;margin-top:.5rem;padding-top:.5rem;border-top:1px dashed var(--line);font-size:.85rem}
+.grant-form label{display:flex;align-items:center;gap:.4rem}
+.grant-devices{display:grid;grid-template-columns:repeat(auto-fill,minmax(9.5rem,1fr));gap:.25rem .7rem;padding:.45rem .55rem;
+  border:1px solid var(--line);border-radius:.45rem;max-height:13rem;overflow:auto}
+.grant-devices.off{opacity:.45}
+.grant-devices small{color:var(--dim)}
+.grant-form .actions{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem}
+.grant-form input[type=password]{width:7.5rem;background:var(--panel-2);border:1px solid var(--line);border-radius:.45rem;padding:.3rem .45rem}
+.badge{margin-left:auto;padding:.05rem .45rem;border-radius:.4rem;font-size:.68rem;font-weight:700;letter-spacing:.04em;white-space:nowrap}
+.badge.energy{background:rgba(251,191,36,.12);color:var(--on)}
+.badge.control{background:rgba(52,211,153,.12);color:var(--ok)}
+.badge.reads{background:rgba(138,151,176,.15);color:var(--muted)}
+.badge.online{background:rgba(167,139,250,.15);color:var(--violet);margin-left:.4rem}
+.flash{border-color:var(--live)!important;box-shadow:0 0 0 2px rgba(56,189,248,.35)}
+.flash.held{border-color:var(--warn)!important;box-shadow:0 0 0 2px rgba(251,191,36,.35)}
+.flash.blocked{border-color:var(--bad)!important;box-shadow:0 0 0 2px rgba(251,113,133,.35)}
+
+.platform{margin-top:.8rem;font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+.platform:first-of-type{margin-top:.2rem}
+.state{margin-left:auto;font-weight:700;font-size:.82rem;white-space:nowrap}
+.state.on{color:var(--on)}.state.live{color:var(--live)}.state.ok{color:var(--ok)}.state.warn{color:var(--warn)}.state.off{color:var(--dim)}
+.device .tags{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.25rem}
+.tag{padding:.02rem .4rem;border:1px solid var(--line);border-radius:.4rem;font-size:.68rem;color:var(--muted)}
+.tag.always{border-color:rgba(52,211,153,.5);color:var(--ok)}
+
+.people{display:grid;gap:.4rem}
+.person{display:flex;align-items:baseline;gap:.6rem;padding:.45rem .6rem;border:1px solid var(--line);border-radius:.55rem;background:var(--panel-2)}
+.person .where{margin-left:auto;font-weight:650}
+.person .where.home{color:var(--ok)}.person .where.away{color:var(--dim)}
+.person .note{color:var(--dim);font-size:.75rem}
+form.inline{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin-top:.6rem}
+form.inline select,form.inline input{background:var(--panel-2);border:1px solid var(--line);border-radius:.45rem;padding:.3rem .45rem;min-width:0}
+form.inline input[type=password]{width:7.5rem}
+.btn{padding:.32rem .8rem;border:1px solid var(--line);border-radius:.45rem;background:var(--panel-2);font-weight:650;cursor:pointer}
+.btn:hover{border-color:#5eead4}
+.btn.yes{border-color:rgba(52,211,153,.6);color:var(--ok)}.btn.no{border-color:rgba(251,113,133,.6);color:var(--bad)}
+.error{margin:.4rem 0 0;color:var(--bad);font-size:.82rem;min-height:1.1em}
+.rules{margin:0;padding-left:1.15rem;display:grid;gap:.35rem;font-size:.9rem}
+.rules b{color:var(--text)}
+.ask{border:1px solid rgba(251,191,36,.45);background:rgba(251,191,36,.06);border-radius:.6rem;padding:.6rem .7rem;margin-top:.5rem}
+.ask .what{font-weight:650}
+.ask .why{color:var(--muted);font-size:.84rem;margin-top:.15rem}
+.empty{color:var(--dim);font-size:.85rem;margin:.3rem 0 0}
+.feed{list-style:none;margin:0;padding:0;display:grid;gap:.35rem;max-height:22rem;overflow:auto}
+.feed li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:.6rem;font-size:.85rem}
+.feed time{color:var(--dim);font-variant-numeric:tabular-nums}
+.feed .done{color:var(--ok)}.feed .blocked{color:var(--bad)}.feed .pending_approval{color:var(--warn)}
+</style>
+</head>
+<body>
+<header class="top">
+  <porch-nav></porch-nav>
+  <div>
+    <h1>How Porch works</h1>
+    <p class="sub">Agents never reach a device platform. They ask Porch; Porch checks who is asking, the
+      home's rules and who is in the room, then drives the device and reads it back.</p>
+  </div>
+  <div class="pills">
+    <span class="pill" id="hub-pill"><span class="dot"></span>Hub</span>
+    <span class="pill" id="gateway-pill"><span class="dot"></span>Porch gateway</span>
+  </div>
+</header>
+
+<main class="flow">
+  <section class="col" aria-label="Agents">
+    <div class="card">
+      <h2>Agents</h2>
+      <p class="lead">Each has its own key, and acts for one person or for the household.</p>
+      <div id="agents"><p class="empty">Reading the agents…</p></div>
+    </div>
+  </section>
+
+  <section class="col porch" aria-label="Porch">
+    <div class="card">
+      <h2>Porch's rules</h2>
+      <p class="lead">Checked on every request, in this order.</p>
+      <ol class="rules">
+        <li><b>Who is asking.</b> An unknown key is refused. An energy agent reads energy and controls nothing.</li>
+        <li><b>What it may control.</b> Each agent has its own rights: lights, appliances; locks and water only with the owner.</li>
+        <li><b>Who is in the room.</b> If someone else is in the device's room and the agent's own person is not,
+          the person in the room decides, with their PIN.</li>
+        <li><b>Family protection.</b> A real device moves only if the owner always allows it, or opened a window for it.</li>
+        <li><b>Read back.</b> Porch confirms each change by reading the device itself.</li>
+      </ol>
+      <p class="empty" id="always-line"></p>
+    </div>
+
+    <div class="card">
+      <h2>Who is where</h2>
+      <p class="lead">Set by hand: this home has no sensor that tells people apart. A change needs that person's PIN, or the owner's.</p>
+      <div class="people" id="people"><p class="empty">Reading the household…</p></div>
+      <form class="inline" id="place-form" hidden>
+        <select id="place-person" aria-label="Person"></select>
+        <select id="place-where" aria-label="Where"></select>
+        <select id="place-by" aria-label="Whose PIN"></select>
+        <input id="place-pin" type="password" autocomplete="off" placeholder="PIN" aria-label="PIN">
+        <button class="btn" type="submit">Set</button>
+      </form>
+      <p class="error" id="place-error" role="alert"></p>
+    </div>
+
+    <div class="card">
+      <h2>Waiting for an answer</h2>
+      <p class="lead">A request Porch holds until the right person says yes. A yes makes Porch carry it out at
+        once; the owner's yes also lets that one command through family protection.</p>
+      <p class="lead" id="answered" role="status"></p>
+      <div id="approvals"><p class="empty">Nothing is waiting.</p></div>
+    </div>
+
+    <div class="card">
+      <h2>What just happened</h2>
+      <ul class="feed" id="feed"><li class="empty">Every request and Porch's answer appear here.</li></ul>
+    </div>
+  </section>
+
+  <section class="col" aria-label="Devices">
+    <div class="card">
+      <h2>Devices</h2>
+      <p class="lead">The home's real devices, by the platform the hub reaches each through.</p>
+      <div id="devices"><p class="empty">Reading the devices…</p></div>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+// Text from the hub, the gateway and the agents is only ever set as text, never as markup.
+const $ = (id) => document.getElementById(id);
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined && text !== null) node.textContent = text;
+  return node;
+}
+const params = new URLSearchParams(location.search);
+const GATEWAY_WS = params.get("engine") || `ws://${location.hostname}:8000/ws/stage`;
+const PLATFORMS = [["matter", "Matter · local"], ["lg_thinq", "LG ThinQ · cloud"], ["google_home", "Google Home · cloud"], ["ring", "Ring · cloud"]];
+
+const state = { devices: new Map(), rooms: {}, places: {}, agents: [], household: null, protection: null, online: { agents: [] },
+                approvals: [] };
+
+async function getJSON(path) {
+  const response = await fetch(path, { cache: "no-store" });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : `HTTP ${response.status}`);
+  return data;
+}
+async function postJSON(path, body) {
+  const response = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : (data.error || `HTTP ${response.status}`));
+  return data;
+}
+function setPill(id, ok) { $(id).className = `pill ${ok ? "ok" : "bad"}`; }
+function clock(at) { return new Date(at || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }); }
+function attr(device, cluster, name) { const c = device.clusters[cluster]; return c ? c.attributes[name] : undefined; }
+
+// ---- Agents
+
+function agentWords(agent) {
+  if (agent.reads === "energy") return ["READS ENERGY", "energy", "Reads energy readings. Controls nothing."];
+  if (!(agent.scopes || []).length) return ["READS", "reads", "Reads the home. Controls nothing."];
+  return ["CONTROLS", "control", "Controls the home, within Porch's rules. Asks whoever is in the room."];
+}
+function personName(id) {
+  const person = state.household && state.household.people.find((p) => p.id === id);
+  return person ? person.name : null;
+}
+function deviceNames(ids) { return ids.map((id) => (state.devices.get(id) || {}).name || id); }
+// Which devices the owner lets this agent control (agent-devices.json, checked by the gateway on
+// every request). Null when the agent controls nothing anyway.
+function mayControl(agent) {
+  if (agent.reads === "energy" || !(agent.scopes || []).length) return null;
+  if (agent.devices_problem) return ["bad", `${agent.devices_problem}: Porch controls nothing until it is fixed.`];
+  if (agent.devices == null) return ["", "May control any device its rights allow."];
+  if (!agent.devices.length) return ["limited", "May control no device: you have not given it one."];
+  return ["limited", `May control only ${deviceNames(agent.devices).join(", ")}.`];
+}
+function renderAgents() {
+  if (state.editing) return;  // the owner is choosing an agent's devices: leave the form as it is
+  const box = $("agents");
+  if (!state.agents.length) { box.replaceChildren(el("p", "empty", state.agentsProblem || "No agents.")); return; }
+  box.replaceChildren(...state.agents.map((agent) => {
+    const [word, kind, may] = agentWords(agent);
+    const card = el("div", "agent");
+    card.dataset.id = agent.id;
+    const row = el("div", "row");
+    row.append(el("span", "name", agent.name), el("span", "for", `for ${personName(agent.person) || agent.acts_for}`),
+               el("span", `badge ${kind}`, word));
+    if (state.online.agents.includes(agent.id) && state.online.enabled) row.append(el("span", "badge online", "PHONE & WEB"));
+    card.append(row);
+    if (agent.client) card.append(el("div", "app", `Lives in ${agent.client}`));
+    card.append(el("div", "may", may));
+    const control = mayControl(agent);
+    if (control) {
+      const line = el("div", `grant ${control[0]}`);
+      const choose = el("button", "btn small", "Choose devices");
+      choose.type = "button";
+      choose.addEventListener("click", () => openGrantEditor(card, agent, line));
+      line.append(el("span", "", control[1]), choose);
+      card.append(line);
+    }
+    card.append(el("div", "last", ""));
+    return card;
+  }));
+}
+
+// The owner chooses the devices one agent may control, with the owner PIN. Porch's rules, the
+// household's and family protection still apply to every device it is given.
+function openGrantEditor(card, agent, line) {
+  state.editing = agent.id;
+  line.hidden = true;
+  const form = el("form", "grant-form");
+  const pick = (value, text, checked) => {
+    const label = el("label");
+    const input = el("input");
+    Object.assign(input, { type: "radio", name: `grant-${agent.id}`, value, checked });
+    label.append(input, document.createTextNode(text));
+    return [label, input];
+  };
+  const [anyLabel, any] = pick("any", "Any device its rights allow", agent.devices == null);
+  const [onlyLabel, only] = pick("only", "Only the devices ticked here:", agent.devices != null);
+  const list = el("div", "grant-devices");
+  const chosen = new Set(agent.devices || []);
+  const controllable = [...state.devices.values()]
+    .filter((d) => Object.values(d.clusters || {}).some((c) => (c.commands || []).length))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  for (const device of controllable) {
+    const label = el("label");
+    const box = el("input");
+    Object.assign(box, { type: "checkbox", value: device.id, checked: chosen.has(device.id) });
+    const room = state.rooms[state.places[device.id]];
+    label.append(box, el("span", "", device.name), el("small", "", room || ""));
+    list.append(label);
+  }
+  const sync = () => {
+    list.classList.toggle("off", any.checked);
+    list.querySelectorAll("input").forEach((box) => { box.disabled = any.checked; });
+  };
+  any.addEventListener("change", sync);
+  only.addEventListener("change", sync);
+  sync();
+  const pin = el("input");
+  Object.assign(pin, { type: "password", placeholder: "Owner PIN", autocomplete: "off", required: true });
+  const save = el("button", "btn yes", "Save");
+  save.type = "submit";
+  const cancel = el("button", "btn", "Cancel");
+  cancel.type = "button";
+  const actions = el("div", "actions");
+  actions.append(pin, save, cancel);
+  const error = el("p", "error", "");
+  form.append(el("div", "", `Which devices may ${agent.name} control?`), anyLabel, onlyLabel, list, actions, error);
+  const close = () => { state.editing = null; renderAgents(); };
+  cancel.addEventListener("click", close);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const devices = any.checked ? null : [...list.querySelectorAll("input:checked")].map((box) => box.value);
+    save.disabled = true;
+    try {
+      await postJSON(`/household/agents/${encodeURIComponent(agent.id)}/devices`, { devices, pin: pin.value });
+      state.editing = null;
+      await loadAgents();
+    } catch (problem) {
+      error.textContent = problem.message;
+      save.disabled = false;
+    }
+  });
+  card.append(form);
+}
+
+// ---- Devices
+
+function readout(device) {
+  if (!device.online) return ["OFFLINE", "off"];
+  const on = attr(device, "OnOff", "OnOff");
+  const mw = attr(device, "ElectricalPowerMeasurement", "ActivePower");
+  const watts = typeof mw === "number" ? ` · ${(mw / 1000).toFixed(mw >= 100000 ? 0 : 1)} W` : "";
+  const level = attr(device, "LevelControl", "CurrentLevel");
+  const bright = on === true && typeof level === "number" ? ` · ${Math.round(level / 2.54)}%` : "";
+  switch (device.device_type) {
+    case "Doorbell": return ["READY", "ok"];
+    case "StickVacuumCleaner": {
+      const s = attr(device, "RvcOperationalState", "OperationalState");
+      return { Docked: ["CHARGED", "ok"], Charging: ["CHARGING", "live"], Running: ["IN USE", "live"], Stopped: ["STANDBY", "off"] }[s] || ["?", "warn"];
+    }
+    case "CastingVideoPlayer": {
+      const s = attr(device, "MediaPlayback", "CurrentState");
+      return { Playing: ["PLAYING", "live"], Paused: ["PAUSED", "warn"], NotPlaying: ["NOT PLAYING", "off"] }[s] || ["?", "warn"];
+    }
+  }
+  if (on === true) return [`ON${bright}${watts}`, device.device_type === "OnOffLight" ? "on" : "live"];
+  if (on === false) return ["OFF", "off"];
+  return ["?", "warn"];
+}
+function renderDevices() {
+  const always = new Set(((state.protection || {}).always_allowed || {}).device_ids || []);
+  const parts = [];
+  for (const [path, label] of PLATFORMS) {
+    const devices = [...state.devices.values()].filter((d) => d.primary_control_path === path);
+    if (!devices.length) continue;
+    parts.push(el("div", "platform", label));
+    for (const device of devices) {
+      const card = el("div", "device");
+      card.dataset.id = device.id;
+      const [word, tone] = readout(device);
+      const row = el("div", "row");
+      const room = state.rooms[state.places[device.id]];
+      row.append(el("span", "name", device.name), el("span", "room", room || "no room on the plan"), el("span", `state ${tone}`, word));
+      const tags = el("div", "tags");
+      const commands = [...new Set(Object.values(device.clusters).flatMap((c) => c.commands))];
+      tags.append(el("span", "tag", commands.length ? commands.join(" · ") : "read only"));
+      if (always.has(device.id)) tags.append(el("span", "tag always", "always allowed"));
+      card.append(row, tags, el("div", "last", ""));
+      parts.push(card);
+    }
+  }
+  $("devices").replaceChildren(...(parts.length ? parts : [el("p", "empty", "No devices.")]));
+}
+
+// ---- People
+
+function placeWords(person) {
+  if (person.where === "home") return [person.room_name ? person.room_name : "Home, room not set", "home"];
+  if (person.where === "away") return ["Away", "away"];
+  return ["Not set", "away"];
+}
+function renderPeople() {
+  const home = state.household;
+  if (!home || !home.people.length) {
+    $("people").replaceChildren(el("p", "empty", "No one yet. On the hub's computer: deploy/home/household.sh add …"));
+    $("place-form").hidden = true;
+    return;
+  }
+  $("people").replaceChildren(...home.people.map((person) => {
+    const row = el("div", "person");
+    const [word, kind] = placeWords(person);
+    row.append(el("span", "", person.name), el("span", "note", person.owner ? "owner" : person.pin_set ? "" : "no PIN yet"),
+               el("span", `where ${kind}`, word));
+    return row;
+  }));
+  const form = $("place-form");
+  if (form.hidden) {
+    const options = (select, items) => select.replaceChildren(...items.map(([value, text]) => { const o = el("option", "", text); o.value = value; return o; }));
+    options($("place-person"), home.people.map((p) => [p.id, p.name]));
+    options($("place-where"), [["away", "Away"], ["home", "Home, room not set"], ...home.rooms.map((r) => [`room:${r.id}`, r.name])]);
+    options($("place-by"), home.people.map((p) => [p.id, `${p.name}'s PIN`]));
+    form.hidden = false;
+  }
+}
+$("place-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const pin = $("place-pin").value;
+  $("place-pin").value = "";  // never left in the page
+  const where = $("place-where").value;
+  try {
+    state.household = await postJSON("/household/presence", {
+      person: $("place-person").value, where: where.startsWith("room:") ? "home" : where,
+      room: where.startsWith("room:") ? where.slice(5) : null, by: $("place-by").value, pin });
+    $("place-error").textContent = "";
+    renderPeople();
+    renderAgents();
+  } catch (error) {
+    $("place-error").textContent = error.message;
+  }
+});
+
+// ---- Requests waiting for someone
+
+// What happened after a yes or a no, in one sentence: a yes makes Porch carry the request out.
+function answeredWords(verdict, outcome, a) {
+  const what = `${a.command} on ${a.device_name || a.device}`;
+  if (verdict !== "approve") return `Declined: ${what}. Nothing happens to the device.`;
+  const result = outcome || {};
+  if (result.executed && result.verified) return `Done: ${what}, read back in ${result.latency_ms} ms.`;
+  if (result.executed) return `${what} was sent, but the read-back did not match.`;
+  return `Approved, but not done: ${result.error || result.reason || "Porch did not send it."}`;
+}
+function renderApprovals() {
+  const box = $("approvals");
+  if (state.approvalsProblem) { box.replaceChildren(el("p", "empty", state.approvalsProblem)); return; }
+  if (!state.approvals.length) { box.replaceChildren(el("p", "empty", "Nothing is waiting.")); return; }
+  const owner = state.household && state.household.people.find((p) => p.owner);
+  box.replaceChildren(...state.approvals.map((a) => {
+    const card = el("div", "ask");
+    const who = (a.approver_names || []).join(" or ") || "the owner";
+    card.append(el("div", "what", `${a.agent_name || a.agent} wants ${a.command} on ${a.device_name}`),
+                el("div", "why", a.why_held || `Waiting for ${who}.`));
+    if (a.reason) card.append(el("div", "why", `The agent said: "${a.reason}"`));
+    const form = el("form", "inline");
+    const person = el("select");
+    const answerers = (a.approvers && a.approvers.length) ? a.approvers.map((id, i) => [id, a.approver_names[i]])
+                                                          : owner ? [[owner.id, owner.name]] : [];
+    for (const [id, name] of answerers) { const o = el("option", "", `${name}'s PIN`); o.value = id; person.append(o); }
+    const pin = el("input");
+    Object.assign(pin, { type: "password", autocomplete: "off", placeholder: "PIN" });
+    pin.setAttribute("aria-label", "PIN");
+    const yes = el("button", "btn yes", "Approve"), no = el("button", "btn no", "Decline");
+    yes.type = no.type = "button";
+    const error = el("p", "error");
+    const answer = async (verdict) => {
+      const value = pin.value;
+      pin.value = "";
+      try {
+        if (verdict === "approve") $("answered").textContent = "Porch is carrying it out…";
+        const data = await postJSON(`/household/approvals/${encodeURIComponent(a.id)}/${verdict}`, { person: person.value, pin: value });
+        $("answered").textContent = answeredWords(verdict, data.outcome, a);
+        loadApprovals();
+      } catch (problem) { error.textContent = problem.message; $("answered").textContent = ""; }
+    };
+    yes.addEventListener("click", () => answer("approve"));
+    no.addEventListener("click", () => answer("decline"));
+    form.append(person, pin, yes, no);
+    card.append(form, error);
+    return card;
+  }));
+}
+
+// ---- What just happened: the gateway's stage feed, and the hub's own events
+
+function feed(text, tone, at) {
+  const list = $("feed");
+  if (list.querySelector(".empty")) list.replaceChildren();
+  const item = el("li");
+  item.append(el("time", "", clock(at)), el("span", tone || "", text));
+  list.prepend(item);
+  while (list.children.length > 40) list.lastChild.remove();
+}
+function flash(selector, id, tone, text) {
+  const node = document.querySelector(`${selector}[data-id="${CSS.escape(id)}"]`);
+  if (!node) return;
+  node.classList.add("flash");
+  if (tone) node.classList.add(tone);
+  if (text) node.querySelector(".last").textContent = text;
+  setTimeout(() => node.classList.remove("flash", "held", "blocked"), 2600);
+}
+function onStage(message) {
+  if (message.type === "agents") return;
+  if (message.type === "audit") {
+    feed(message.summary, message.outcome, message.at);
+    if (message.agent_id) flash(".agent", message.agent_id, message.outcome === "blocked" ? "blocked" : message.outcome === "pending_approval" ? "held" : "",
+                                `${clock(message.at)} ${message.summary}`);
+    loadApprovals();
+  } else if (message.type === "safety" && message.device_id) {
+    flash(".device", message.device_id, message.kind === "approval_required" ? "held" : "blocked", message.title);
+  }
+}
+function followGateway() {
+  let retry = 1000;
+  const open = () => {
+    let socket;
+    try { socket = new WebSocket(GATEWAY_WS); } catch { setPill("gateway-pill", false); return; }
+    socket.addEventListener("open", () => { retry = 1000; setPill("gateway-pill", true); });
+    socket.addEventListener("message", (m) => { try { onStage(JSON.parse(m.data)); } catch { /* not ours */ } });
+    socket.addEventListener("close", () => { setPill("gateway-pill", false); setTimeout(open, retry); retry = Math.min(retry * 2, 15000); });
+  };
+  open();
+}
+function followHub() {
+  let retry = 1000;
+  const open = () => {
+    const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/events`);
+    socket.addEventListener("open", () => { retry = 1000; setPill("hub-pill", true); });
+    socket.addEventListener("message", (m) => {
+      let event;
+      try { event = JSON.parse(m.data); } catch { return; }
+      const device = event.device_id && state.devices.get(event.device_id);
+      if (event.type === "state_changed" && device) { device.clusters = event.clusters; renderDevices(); flash(".device", device.id, "", ""); }
+      else if (event.type === "online_changed" && device) { device.online = event.online; renderDevices(); }
+      else if (event.type === "command_executed" && device) {
+        renderDevices();
+        flash(".device", device.id, event.status === "done" ? "" : "blocked",
+              `${clock(event.at)} ${event.command} ${event.status === "done" ? `confirmed in ${event.latency_ms} ms` : "not confirmed"}`);
+      } else if (event.type === "household_changed") { state.household = event.data; renderPeople(); renderAgents(); }
+      else if (event.type === "protection_changed") { loadProtection(); }
+    });
+    socket.addEventListener("close", () => { setPill("hub-pill", false); setTimeout(open, retry); retry = Math.min(retry * 2, 15000); });
+  };
+  open();
+}
+
+// ---- Loading
+
+async function loadDevices() {
+  const [devices, placed] = await Promise.all([getJSON("/devices"), getJSON("/home/places")]);
+  state.devices = new Map(devices.map((d) => [d.id, d]));
+  state.rooms = Object.fromEntries(placed.rooms.map((r) => [r.id, r.name]));
+  state.places = placed.devices;
+  renderDevices();
+}
+async function loadAgents() {
+  try {
+    [state.agents, state.online] = await Promise.all([getJSON("/household/agents"), getJSON("/online")]);
+    state.agentsProblem = null;
+  } catch (error) { state.agents = []; state.agentsProblem = error.message; }
+  renderAgents();
+}
+async function loadHousehold() {
+  try { state.household = await getJSON("/household"); } catch { state.household = null; }
+  renderPeople();
+  renderAgents();
+}
+async function loadApprovals() {
+  try { state.approvals = await getJSON("/household/approvals"); state.approvalsProblem = null; }
+  catch (error) { state.approvals = []; state.approvalsProblem = error.message; }
+  renderApprovals();
+}
+async function loadProtection() {
+  try { state.protection = await getJSON("/protection"); } catch { state.protection = null; }
+  const always = ((state.protection || {}).always_allowed || {}).device_ids || [];
+  const names = always.map((id) => (state.devices.get(id) || {}).name || id);
+  $("always-line").textContent = state.protection && state.protection.enforced
+    ? (names.length ? `Always allowed now: ${names.join(", ")}.` : "Nothing is always allowed now: a device moves only in a control window.")
+    : "Family protection is off on this hub.";
+  renderDevices();
+}
+
+(async () => {
+  try { await loadDevices(); setPill("hub-pill", true); } catch { setPill("hub-pill", false); }
+  await Promise.all([loadHousehold(), loadAgents(), loadProtection(), loadApprovals()]);
+  followHub();
+  followGateway();
+  setInterval(loadApprovals, 5000);
+  setInterval(loadAgents, 15000);
+})();
+</script>
+</body>
+</html>
